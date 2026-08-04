@@ -21,7 +21,7 @@ import { navIcons } from './nav-icons';
 import { useUser } from '@/hooks/use-user';
 import { useSidebar } from '@/contexts/sidebar-context';
 
-import sectionFlags from '@root/section_flags.json';
+import sectionFlags from '@/config/section-flags.json';
 
 export function SideNav(): React.JSX.Element {
   const pathname = usePathname();

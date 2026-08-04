@@ -14,6 +14,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   Grid,
   IconButton,
@@ -23,6 +24,7 @@ import {
   Paper,
   Select,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
@@ -31,6 +33,7 @@ import {
   TablePagination,
   TableRow,
   TableSortLabel,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -45,7 +48,9 @@ import {
   Warning as WarningIcon,
   CheckCircle as CheckIcon,
   TrendUp as TrendIcon,
-  Sparkle as SparkleIcon
+  Sparkle as SparkleIcon,
+  ArrowsLeftRight as TransferIcon,
+  Plus as PlusIcon,
 } from '@phosphor-icons/react';
 
 export interface InventoryItem {
@@ -73,6 +78,10 @@ interface InventoryTableProps {
   loading?: boolean;
   onRefresh?: () => void;
   onAdjustStock?: (variantId: string, newStock: number) => Promise<void>;
+  onUpdateProduct?: (updatedItem: InventoryItem) => Promise<void>;
+  onOpenTransfer?: () => void;
+  onOpenIntake?: () => void;
+  onOpenMissing?: () => void;
 }
 
 type Order = 'asc' | 'desc';
@@ -85,17 +94,49 @@ export function InventoryTable({
   loading = false,
   onRefresh,
   onAdjustStock,
+  onUpdateProduct,
+  onOpenTransfer,
+  onOpenIntake,
+  onOpenMissing,
 }: InventoryTableProps): React.JSX.Element {
   // Global search autocomplete state
   const [globalSearch, setGlobalSearch] = React.useState<string>('');
 
-  // Column-level Autocomplete filter states
+  // Column Filters state
   const [descriptionFilter, setDescriptionFilter] = React.useState<string>('');
   const [providerFilter, setProviderFilter] = React.useState<string | null>(null);
   const [genreFilter, setGenreFilter] = React.useState<string | null>(null);
   const [sizeFilter, setSizeFilter] = React.useState<string | null>(null);
   const [colorFilter, setColorFilter] = React.useState<string | null>(null);
   const [stockStatusFilter, setStockStatusFilter] = React.useState<string | null>(null);
+
+  // Edit Product Modal State
+  const [editItem, setEditItem] = React.useState<InventoryItem | null>(null);
+  const [editTab, setEditTab] = React.useState<number>(0);
+  const [saving, setSaving] = React.useState<boolean>(false);
+  const [editForm, setEditForm] = React.useState<{
+    description: string;
+    price: number;
+    cost: number;
+    provider: string;
+    department: string;
+    genre: string;
+    size: string;
+    color: string;
+    sku: string;
+    stockQuantity: number;
+  }>({
+    description: '',
+    price: 0,
+    cost: 0,
+    provider: '',
+    department: '',
+    genre: '',
+    size: '',
+    color: '',
+    sku: '',
+    stockQuantity: 0,
+  });
 
   // Sorting & Pagination
   const [orderBy, setOrderBy] = React.useState<keyof InventoryItem>('description');
@@ -113,6 +154,14 @@ export function InventoryTable({
     const set = new Set<string>();
     items.forEach((i) => {
       if (i.provider && i.provider !== 'Sin Proveedor') set.add(i.provider);
+    });
+    return Array.from(set).sort();
+  }, [items]);
+
+  const departmentOptions = React.useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((i) => {
+      if (i.department && i.department !== 'General' && i.department !== 'N/A') set.add(i.department);
     });
     return Array.from(set).sort();
   }, [items]);
@@ -283,208 +332,120 @@ export function InventoryTable({
     };
   }, [items]);
 
-  const handleOpenAdjust = (item: InventoryItem) => {
-    setAdjustItem(item);
-    setNewStockVal(item.stockQuantity);
+  const handleOpenEdit = (item: InventoryItem) => {
+    setEditItem(item);
+    setEditTab(0);
+    setEditForm({
+      description: item.description || '',
+      price: item.price || 0,
+      cost: item.cost || 0,
+      provider: item.provider || '',
+      department: item.department || '',
+      genre: item.genre || '',
+      size: item.size || '',
+      color: item.color || '',
+      sku: item.sku || '',
+      stockQuantity: item.stockQuantity || 0,
+    });
   };
 
-  const handleSaveStock = async () => {
-    if (!adjustItem || !onAdjustStock) return;
-    setAdjusting(true);
+  const handleSaveProduct = async () => {
+    if (!editItem) return;
+    setSaving(true);
     try {
-      await onAdjustStock(adjustItem.productVariantId, newStockVal);
-      setAdjustItem(null);
+      const updatedItem: InventoryItem = {
+        ...editItem,
+        description: editForm.description,
+        price: Number(editForm.price),
+        cost: Number(editForm.cost),
+        provider: editForm.provider,
+        department: editForm.department,
+        genre: editForm.genre,
+        size: editForm.size,
+        color: editForm.color,
+        sku: editForm.sku,
+        stockQuantity: Number(editForm.stockQuantity),
+      };
+
+      if (onUpdateProduct) {
+        await onUpdateProduct(updatedItem);
+      } else if (onAdjustStock) {
+        await onAdjustStock(editItem.productVariantId, Number(editForm.stockQuantity));
+      }
+      setEditItem(null);
     } catch (e) {
-      console.error('Failed to update stock', e);
+      console.error('Failed to update product', e);
     } finally {
-      setAdjusting(false);
+      setSaving(false);
     }
   };
 
   return (
     <Stack spacing={3}>
-      {/* Metrics Header Summary */}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    bgcolor: 'primary.alpha12',
-                    color: 'primary.main',
-                    display: 'flex',
-                  }}
-                >
-                  <PackageIcon size={28} />
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    TOTAL PRODUCTOS / SKUS
-                  </Typography>
-                  <Typography variant="h5" fontWeight={700}>
-                    {summaryMetrics.totalSkus.toLocaleString()}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    bgcolor: 'success.alpha12',
-                    color: 'success.main',
-                    display: 'flex',
-                  }}
-                >
-                  <CheckIcon size={28} />
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    UNIDADES EN INVENTARIO
-                  </Typography>
-                  <Typography variant="h5" fontWeight={700}>
-                    {summaryMetrics.totalUnits.toLocaleString()}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    bgcolor: 'warning.alpha12',
-                    color: 'warning.main',
-                    display: 'flex',
-                  }}
-                >
-                  <WarningIcon size={28} />
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    POCO STOCK (≤ 5) / AGOTADOS
-                  </Typography>
-                  <Typography variant="h5" fontWeight={700} color={summaryMetrics.outOfStockCount > 0 ? 'error.main' : 'warning.main'}>
-                    {summaryMetrics.lowStockCount} / {summaryMetrics.outOfStockCount}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    bgcolor: 'info.alpha12',
-                    color: 'info.main',
-                    display: 'flex',
-                  }}
-                >
-                  <TrendIcon size={28} />
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    VALOR TOTAL INVENTARIO
-                  </Typography>
-                  <Typography variant="h5" fontWeight={700}>
-                    ${summaryMetrics.totalValuation.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
 
       {/* Main Filter & Search Control Panel */}
       <Card variant="outlined" sx={{ borderRadius: 2, p: 2.5 }}>
         <Stack spacing={2}>
+          {/* Top Control Bar: Store Selector & Action Buttons */}
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center" justifyContent="space-between">
-            {/* Global Autocomplete Search Bar */}
-            <Autocomplete
-              freeSolo
-              fullWidth
-              options={globalSearchOptions}
-              value={globalSearch}
-              onInputChange={(_, value) => {
-                setGlobalSearch(value || '');
-                setPage(0);
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  placeholder="Buscar por Descripción, Proveedor, SKU, Código de Barras, Color, Talla..."
-                  variant="outlined"
-                  size="small"
-                  InputProps={{
-                    ...params.InputProps,
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon size={20} color="var(--mui-palette-text-secondary)" />
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <>
-                        {globalSearch && (
-                          <IconButton size="small" onClick={() => setGlobalSearch('')}>
-                            <ClearIcon size={16} />
-                          </IconButton>
-                        )}
-                        {params.InputProps.endAdornment}
-                      </>
-                    ),
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      bgcolor: 'background.neutral',
-                    },
-                  }}
-                />
-              )}
-            />
+            {/* Store Selector Dropdown */}
+            {stores.length > 0 && (
+              <FormControl size="small" sx={{ minWidth: 260, width: { xs: '100%', sm: 'auto' } }}>
+                <InputLabel id="store-select-label">🏢 Sucursal / Tienda</InputLabel>
+                <Select
+                  labelId="store-select-label"
+                  value={selectedStoreId ?? (stores[0]?.id || 1)}
+                  label="🏢 Sucursal / Tienda"
+                  onChange={(e) => onStoreChange && onStoreChange(Number(e.target.value))}
+                  sx={{ borderRadius: 2, bgcolor: 'background.paper', fontWeight: 700 }}
+                >
+                  {stores.map((s) => (
+                    <MenuItem key={s.id} value={s.id}>
+                      🏢 {s.name} ({s.code || `SUC-${s.id}`})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
 
-            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ width: { xs: '100%', md: 'auto' } }}>
-              {/* Store Selector Dropdown */}
-              {stores.length > 0 && (
-                <FormControl size="small" sx={{ minWidth: 220 }}>
-                  <InputLabel id="store-select-label">🏢 Sucursal / Tienda</InputLabel>
-                  <Select
-                    labelId="store-select-label"
-                    value={selectedStoreId ?? (stores[0]?.id || 1)}
-                    label="🏢 Sucursal / Tienda"
-                    onChange={(e) => onStoreChange && onStoreChange(Number(e.target.value))}
-                    sx={{ borderRadius: 2, bgcolor: 'background.paper', fontWeight: 700 }}
-                  >
-                    {stores.map((s) => (
-                      <MenuItem key={s.id} value={s.id}>
-                        🏢 {s.name} ({s.code || `SUC-${s.id}`})
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+            <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" sx={{ gap: 1 }}>
+              {onOpenMissing && (
+                <Button
+                  variant="contained"
+                  color="error"
+                  size="small"
+                  startIcon={<WarningIcon size={18} />}
+                  onClick={onOpenMissing}
+                  sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
+                >
+                  Faltantes
+                </Button>
+              )}
+
+              {onOpenIntake && (
+                <Button
+                  variant="contained"
+                  color="success"
+                  size="small"
+                  startIcon={<PlusIcon size={18} />}
+                  onClick={onOpenIntake}
+                  sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
+                >
+                  Ingresar
+                </Button>
+              )}
+
+              {onOpenTransfer && (
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  size="small"
+                  startIcon={<TransferIcon size={18} />}
+                  onClick={onOpenTransfer}
+                  sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
+                >
+                  Transferir
+                </Button>
               )}
 
               {activeFiltersCount > 0 && (
@@ -501,12 +462,63 @@ export function InventoryTable({
               )}
 
               {onRefresh && (
-                <IconButton onClick={onRefresh} color="primary" disabled={loading} title="Actualizar Datos">
-                  <RefreshIcon size={22} className={loading ? 'spin' : ''} />
-                </IconButton>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<RefreshIcon size={18} className={loading ? 'spin' : ''} />}
+                  onClick={onRefresh}
+                  disabled={loading}
+                  sx={{ borderRadius: 2, fontWeight: 600, whitespace: 'nowrap' }}
+                >
+                  Actualizar Inventario
+                </Button>
               )}
             </Stack>
           </Stack>
+
+          {/* Global Autocomplete Search Bar (Full Width below store dropdown & buttons) */}
+          <Autocomplete
+            freeSolo
+            fullWidth
+            options={globalSearchOptions}
+            value={globalSearch}
+            onInputChange={(_, value) => {
+              setGlobalSearch(value || '');
+              setPage(0);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="Buscar por Descripción, Proveedor, SKU, Código de Barras, Color, Talla..."
+                variant="outlined"
+                size="small"
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon size={20} color="var(--mui-palette-text-secondary)" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <>
+                      {globalSearch && (
+                        <IconButton size="small" onClick={() => setGlobalSearch('')}>
+                          <ClearIcon size={16} />
+                        </IconButton>
+                      )}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    bgcolor: 'background.neutral',
+                  },
+                }}
+              />
+            )}
+          />
 
           {/* Dynamic Column Autocomplete Filters Section */}
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: 'background.neutral' }}>
@@ -827,8 +839,8 @@ export function InventoryTable({
                       </TableCell>
 
                       <TableCell align="right">
-                        <Tooltip title="Ajustar Existencias / Stock">
-                          <IconButton size="small" color="primary" onClick={() => handleOpenAdjust(item)}>
+                        <Tooltip title="Editar Producto y Existencias">
+                          <IconButton size="small" color="primary" onClick={() => handleOpenEdit(item)}>
                             <EditIcon size={18} />
                           </IconButton>
                         </Tooltip>
@@ -857,38 +869,327 @@ export function InventoryTable({
         />
       </Card>
 
-      {/* Stock Adjustment Modal Dialog */}
-      {adjustItem && (
-        <Dialog open={Boolean(adjustItem)} onClose={() => setAdjustItem(null)} maxWidth="xs" fullWidth>
-          <DialogTitle>Ajustar Existencia / Stock</DialogTitle>
-          <DialogContent dividers>
-            <Stack spacing={2} pt={1}>
-              <Box>
-                <Typography variant="subtitle2" fontWeight={700}>
-                  {adjustItem.description}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  SKU #{adjustItem.productId} | Talla: {adjustItem.size} | Color: {adjustItem.color}
-                </Typography>
-              </Box>
+      {/* Metrics Summary Below Table (3 Cards) */}
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: 'primary.alpha12',
+                    color: 'primary.main',
+                    display: 'flex',
+                  }}
+                >
+                  <PackageIcon size={28} />
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    TOTAL PRODUCTOS / SKUS
+                  </Typography>
+                  <Typography variant="h5" fontWeight={700}>
+                    {summaryMetrics.totalSkus.toLocaleString()}
+                  </Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
 
-              <TextField
-                label="Nueva Cantidad en Stock"
-                type="number"
-                fullWidth
-                value={newStockVal}
-                onChange={(e) => setNewStockVal(Number(e.target.value))}
-                inputProps={{ min: 0 }}
-                autoFocus
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: 'success.alpha12',
+                    color: 'success.main',
+                    display: 'flex',
+                  }}
+                >
+                  <CheckIcon size={28} />
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    UNIDADES EN INVENTARIO
+                  </Typography>
+                  <Typography variant="h5" fontWeight={700}>
+                    {summaryMetrics.totalUnits.toLocaleString()}
+                  </Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: 'warning.alpha12',
+                    color: 'warning.main',
+                    display: 'flex',
+                  }}
+                >
+                  <WarningIcon size={28} />
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    POCO STOCK (≤ 5) / AGOTADOS
+                  </Typography>
+                  <Typography variant="h5" fontWeight={700} color={summaryMetrics.outOfStockCount > 0 ? 'error.main' : 'warning.main'}>
+                    {summaryMetrics.lowStockCount} / {summaryMetrics.outOfStockCount}
+                  </Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Complete Product Edit Modal Dialog */}
+      {editItem && (
+        <Dialog open={Boolean(editItem)} onClose={() => setEditItem(null)} maxWidth="md" fullWidth>
+          <DialogTitle sx={{ pb: 1 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Stack direction="row" alignItems="center" spacing={1.5}>
+                <Box
+                  sx={{
+                    p: 1,
+                    borderRadius: 2,
+                    bgcolor: 'primary.alpha12',
+                    color: 'primary.main',
+                    display: 'flex',
+                  }}
+                >
+                  <PackageIcon size={24} weight="bold" />
+                </Box>
+                <Box>
+                  <Typography variant="h6" fontWeight={700}>
+                    Editar Producto
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    SKU #{editItem.sku || editItem.productId} • {editItem.description}
+                  </Typography>
+                </Box>
+              </Stack>
+              <Chip
+                label={`ID #${editItem.productId}`}
+                variant="outlined"
+                size="small"
+                color="primary"
+                sx={{ fontWeight: 700 }}
               />
             </Stack>
+          </DialogTitle>
+
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
+            <Tabs value={editTab} onChange={(_, val) => setEditTab(val)}>
+              <Tab label="Información General" id="tab-0" />
+              <Tab label="Especificaciones" id="tab-1" />
+              <Tab label="Sección de Stock / Existencias" id="tab-2" />
+            </Tabs>
+          </Box>
+
+          <DialogContent dividers sx={{ p: 3 }}>
+            {/* Tab 0: General Product Information */}
+            {editTab === 0 && (
+              <Stack spacing={3}>
+                <TextField
+                  label="Nombre / Descripción del Producto"
+                  fullWidth
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, description: e.target.value }))}
+                />
+
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Precio de Venta ($)"
+                      type="number"
+                      fullWidth
+                      value={editForm.price}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, price: Number(e.target.value) }))}
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                      }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Costo de Compra ($)"
+                      type="number"
+                      fullWidth
+                      value={editForm.cost}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, cost: Number(e.target.value) }))}
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                      }}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <Autocomplete
+                      options={providerOptions}
+                      value={editForm.provider || null}
+                      onChange={(_, newValue) => setEditForm((prev) => ({ ...prev, provider: newValue || '' }))}
+                      onInputChange={(_, newInputValue) => setEditForm((prev) => ({ ...prev, provider: newInputValue }))}
+                      freeSolo
+                      renderInput={(params) => <TextField {...params} label="Proveedor / Marca" fullWidth />}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <Autocomplete
+                      options={departmentOptions}
+                      value={editForm.department || null}
+                      onChange={(_, newValue) => setEditForm((prev) => ({ ...prev, department: newValue || '' }))}
+                      onInputChange={(_, newInputValue) => setEditForm((prev) => ({ ...prev, department: newInputValue }))}
+                      freeSolo
+                      renderInput={(params) => <TextField {...params} label="Departamento" fullWidth />}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <Autocomplete
+                      options={genreOptions}
+                      value={editForm.genre || null}
+                      onChange={(_, newValue) => setEditForm((prev) => ({ ...prev, genre: newValue || '' }))}
+                      onInputChange={(_, newInputValue) => setEditForm((prev) => ({ ...prev, genre: newInputValue }))}
+                      freeSolo
+                      renderInput={(params) => <TextField {...params} label="Categoría / Género" fullWidth />}
+                    />
+                  </Grid>
+                </Grid>
+              </Stack>
+            )}
+
+            {/* Tab 1: Variant Specifications */}
+            {editTab === 1 && (
+              <Stack spacing={3}>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Código SKU"
+                      fullWidth
+                      value={editForm.sku}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, sku: e.target.value }))}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Autocomplete
+                      options={sizeOptions}
+                      value={editForm.size || null}
+                      onChange={(_, newValue) => setEditForm((prev) => ({ ...prev, size: newValue || '' }))}
+                      onInputChange={(_, newInputValue) => setEditForm((prev) => ({ ...prev, size: newInputValue }))}
+                      freeSolo
+                      renderInput={(params) => <TextField {...params} label="Talla / Medida" fullWidth />}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <Autocomplete
+                      options={colorOptions}
+                      value={editForm.color || null}
+                      onChange={(_, newValue) => setEditForm((prev) => ({ ...prev, color: newValue || '' }))}
+                      onInputChange={(_, newInputValue) => setEditForm((prev) => ({ ...prev, color: newInputValue }))}
+                      freeSolo
+                      renderInput={(params) => <TextField {...params} label="Color" fullWidth />}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Código de Barras (Barcodes)"
+                      fullWidth
+                      value={editItem.barcodes?.join(', ') || 'N/A'}
+                      disabled
+                      helperText="Lectura desde código escaneado"
+                    />
+                  </Grid>
+                </Grid>
+              </Stack>
+            )}
+
+            {/* Tab 2: Stock & Inventory Section */}
+            {editTab === 2 && (
+              <Stack spacing={3}>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: 'background.neutral' }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Sucursal / Almacén Activo
+                      </Typography>
+                      <Typography variant="subtitle1" fontWeight={700}>
+                        {stores.find((s) => s.id === selectedStoreId)?.name || 'Tienda Principal'}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={`Valor Stock: $${(editForm.stockQuantity * editForm.price).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
+                      color="primary"
+                      variant="filled"
+                      sx={{ fontWeight: 800 }}
+                    />
+                  </Stack>
+                </Paper>
+
+                <Stack spacing={1}>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    Cantidad en Stock
+                  </Typography>
+                  <TextField
+                    type="number"
+                    fullWidth
+                    value={editForm.stockQuantity}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, stockQuantity: Number(e.target.value) }))}
+                    inputProps={{ min: 0 }}
+                  />
+                </Stack>
+
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    Ajuste Rápido de Stock (+ / -)
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap">
+                    {[-10, -5, -1, 1, 5, 10].map((delta) => (
+                      <Button
+                        key={delta}
+                        variant="outlined"
+                        size="small"
+                        color={delta > 0 ? 'success' : 'error'}
+                        onClick={() =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            stockQuantity: Math.max(0, prev.stockQuantity + delta),
+                          }))
+                        }
+                        sx={{ minWidth: 60, fontWeight: 700 }}
+                      >
+                        {delta > 0 ? `+${delta}` : delta}
+                      </Button>
+                    ))}
+                  </Stack>
+                </Stack>
+              </Stack>
+            )}
           </DialogContent>
-          <DialogActions sx={{ p: 2 }}>
-            <Button onClick={() => setAdjustItem(null)} disabled={adjusting}>
+
+          <DialogActions sx={{ p: 2.5, px: 3 }}>
+            <Button onClick={() => setEditItem(null)} disabled={saving} color="inherit">
               Cancelar
             </Button>
-            <Button variant="contained" onClick={handleSaveStock} disabled={adjusting}>
-              {adjusting ? <CircularProgress size={20} /> : 'Guardar Ajuste'}
+            <Button variant="contained" onClick={handleSaveProduct} disabled={saving} sx={{ borderRadius: 2, px: 3 }}>
+              {saving ? <CircularProgress size={20} color="inherit" /> : 'Guardar Cambios'}
             </Button>
           </DialogActions>
         </Dialog>

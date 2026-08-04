@@ -435,12 +435,12 @@ export default function DashboardPulsePage(): React.JSX.Element {
   const fetchMachineUtilization = React.useCallback(async () => {
     try {
       const response = await apiClient.get(`/Analytics/machine-utilization?startDate=${machineUtilStartDate}&endDate=${machineUtilEndDate}`);
-      if (response.data) {
+      if (response && response.data) {
         setMachineUtilNames(response.data.machineNames || []);
         setMachineUtilData(response.data.data || []);
       }
     } catch (err) {
-      console.error('Failed to fetch machine utilization:', err);
+      console.warn('Failed to fetch machine utilization analytics:', err);
     }
   }, [machineUtilStartDate, machineUtilEndDate]);
 

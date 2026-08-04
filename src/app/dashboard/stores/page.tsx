@@ -121,12 +121,17 @@ export default function StoresPage(): React.JSX.Element {
   };
 
   return (
-    <Box component="main" sx={{ flexGrow: 1, py: 4, px: { xs: 2, md: 4 } }}>
+    <Box component="main" sx={{ flexGrow: 1, py: { xs: 2, sm: 4 }, px: { xs: 1.5, sm: 3, md: 4 } }}>
       <Container maxWidth="xl">
         <Stack spacing={3}>
-          <Stack direction="row" spacing={3} justifyContent="space-between" alignItems="center">
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={{ xs: 1.5, sm: 3 }}
+            justifyContent="space-between"
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+          >
             <Stack spacing={0.5}>
-              <Typography variant="h4" fontWeight={800}>
+              <Typography variant="h4" fontWeight={800} sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
                 Gestión De Sucursales & Tiendas
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -138,7 +143,7 @@ export default function StoresPage(): React.JSX.Element {
               variant="contained"
               startIcon={<PlusIcon />}
               onClick={handleOpenCreate}
-              sx={{ borderRadius: 2 }}
+              sx={{ borderRadius: 2, width: { xs: '100%', sm: 'auto' } }}
             >
               Nueva Sucursal / Tienda
             </Button>

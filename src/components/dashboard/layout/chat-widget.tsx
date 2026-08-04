@@ -350,8 +350,9 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
             <Paper 
                 elevation={4} 
                 sx={{ 
-                    width: 320, 
-                    height: isMinimized ? 44 : 400, 
+                    width: { xs: '100%', sm: 320 }, 
+                    height: { xs: isMinimized ? 44 : '60vh', sm: isMinimized ? 44 : 400 }, 
+                    maxHeight: '80vh',
                     display: 'flex', 
                     flexDirection: 'column', 
                     borderRadius: '12px 12px 0 0', 
@@ -359,7 +360,7 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
                     pointerEvents: 'auto',
                     border: '1px solid',
                     borderColor: 'divider',
-                    transition: 'height 0.2s ease-in-out'
+                    transition: 'all 0.2s ease-in-out'
                 }}
             >
                 {/* Chat Header */}
@@ -894,10 +895,23 @@ export function ChatWidget(): React.JSX.Element | null {
     const totalUnread = threads.reduce((sum, t) => sum + t.unreadCount, 0);
 
     return (
-        <Box sx={{ position: 'fixed', bottom: 0, right: 24, zIndex: 1200, display: 'flex', alignItems: 'flex-end', gap: 2, pointerEvents: 'none' }}>
+        <Box
+            sx={{
+                position: 'fixed',
+                bottom: 0,
+                right: { xs: 8, sm: 24 },
+                left: { xs: 8, sm: 'auto' },
+                zIndex: 1200,
+                display: 'flex',
+                flexDirection: { xs: 'column-reverse', sm: 'row' },
+                alignItems: { xs: 'stretch', sm: 'flex-end' },
+                gap: { xs: 1, sm: 2 },
+                pointerEvents: 'none'
+            }}
+        >
             
             {/* Real-time Toast Notifications Box */}
-            <Stack spacing={1} sx={{ mb: 2, pointerEvents: 'auto', maxWidth: 280, alignItems: 'flex-end' }}>
+            <Stack spacing={1} sx={{ mb: 2, pointerEvents: 'auto', maxWidth: { xs: '100%', sm: 280 }, alignItems: { xs: 'stretch', sm: 'flex-end' } }}>
                 {notifications.map(n => (
                     <Card 
                         key={n.id} 
@@ -956,8 +970,9 @@ export function ChatWidget(): React.JSX.Element | null {
             <Paper 
                 elevation={4} 
                 sx={{ 
-                    width: 280, 
-                    height: isMenuExpanded ? 400 : 44, 
+                    width: { xs: '100%', sm: 280 }, 
+                    height: { xs: isMenuExpanded ? '55vh' : 44, sm: isMenuExpanded ? 400 : 44 }, 
+                    maxHeight: '75vh',
                     display: 'flex', 
                     flexDirection: 'column', 
                     borderRadius: '12px 12px 0 0', 
@@ -965,7 +980,7 @@ export function ChatWidget(): React.JSX.Element | null {
                     pointerEvents: 'auto',
                     border: '1px solid',
                     borderColor: 'divider',
-                    transition: 'height 0.2s ease-in-out'
+                    transition: 'all 0.2s ease-in-out'
                 }}
             >
                 {/* Collapsed/Expanded Header Toggle */}

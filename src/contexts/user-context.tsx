@@ -32,7 +32,7 @@ export function UserProvider({ children }: UserProviderProps): React.JSX.Element
 
       if (error) {
         logger.error(error);
-        setState((prev) => ({ ...prev, user: null, error: 'Something went wrong', isLoading: false }));
+        setState((prev) => ({ ...prev, user: null, error: null, isLoading: false }));
         return;
       }
 

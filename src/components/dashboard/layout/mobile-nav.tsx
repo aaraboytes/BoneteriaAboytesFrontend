@@ -21,7 +21,7 @@ import { navItems } from './config';
 import { navIcons } from './nav-icons';
 import { useUser } from '@/hooks/use-user';
 
-import sectionFlags from '@root/section_flags.json';
+import sectionFlags from '@/config/section-flags.json';
 
 export interface MobileNavProps {
   onClose?: () => void;
