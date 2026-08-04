@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Box, Button, Container, Stack, Typography, CircularProgress } from '@mui/material';
+import { Box, Button, Container, Stack, Typography, CircularProgress, Alert } from '@mui/material';
 import { Plus as PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
 import apiClient from '@/lib/api-client';
 
@@ -11,16 +11,21 @@ import { ProductDialog } from '@/components/dashboard/products/product-dialog';
 export default function ProductsPage(): React.JSX.Element {
     const [products, setProducts] = React.useState<Product[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState<string | null>(null);
     const [dialogOpen, setDialogOpen] = React.useState(false);
     const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
 
     const fetchProducts = async () => {
         setLoading(true);
+        setError(null);
         try {
             const res = await apiClient.get('/Products');
-            setProducts(res.data);
+            if (Array.isArray(res.data)) {
+                setProducts(res.data);
+            }
         } catch (err) {
             console.error('Failed to fetch products', err);
+            setError('Error al cargar la lista de productos del servidor.');
         } finally {
             setLoading(false);
         }
@@ -91,6 +96,12 @@ export default function ProductsPage(): React.JSX.Element {
                             Add Product
                         </Button>
                     </Stack>
+
+                    {error && (
+                        <Alert severity="error" onClose={() => setError(null)}>
+                            {error}
+                        </Alert>
+                    )}
 
                     {loading ? (
                         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
