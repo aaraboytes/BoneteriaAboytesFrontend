@@ -1,0 +1,5 @@
+Appointmens of the day,,,,,,,,,,
+{Date},,,,,,,,,,
+,,,,,,,,,,
+Time,#,Patient,Services,Status,Patient balance,,,,,
+{time},{aptNum},{patientName},{services},{aptStatus},{patientBalance},,,,,

@@ -1,0 +1,11 @@
+,,
+,,
+Nombre,{patientName},Fecha: {date}
+Dr. Referencia,{referenceName},Edad: {age}
+Fecha de Lesión / CX,{dateOfInjury},
+Proxima consulta,{NextConsultationDate},
+Diagnóstico ,{diagnostic},
+Motivo de consulta, {reasonForConsultation},
+Tratamiento, {indications},
+Observaciones ,{treatmentObservations},
+{peopleInCharge},TX0: {tx0List},TX: {txList}

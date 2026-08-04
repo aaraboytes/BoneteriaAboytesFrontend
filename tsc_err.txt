@@ -1,0 +1,5 @@
+﻿src/app/dashboard/appointments/appointment-dialog.tsx(835,107): error TS2367: This comparison appears to be unintentional because the types 'number' and 'string' have no overlap.
+src/app/dashboard/doctors/doctors-client.tsx(10,30): error TS2307: Cannot find module './doctors-table' or its corresponding type declarations.
+src/app/dashboard/doctors/doctors-client.tsx(11,30): error TS2307: Cannot find module './doctor-dialog' or its corresponding type declarations.
+src/app/dashboard/doctors/doctors-client.tsx(12,32): error TS2307: Cannot find module './doctors-filters' or its corresponding type declarations.
+src/app/dashboard/doctors/doctors-client.tsx(103,26): error TS7006: Parameter 'doctor' implicitly has an 'any' type.

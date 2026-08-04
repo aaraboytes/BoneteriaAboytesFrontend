@@ -1,0 +1,118 @@
+'use client';
+
+import * as React from 'react';
+import Button from '@mui/material/Button';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import { PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
+
+import apiClient from '@/lib/api-client';
+import { DoctorsTable } from './doctors-table';
+import { DoctorDialog } from './doctor-dialog';
+import { DoctorsFilters } from './doctors-filters';
+
+export interface DoctorRecord {
+    id: number;
+    fullName: string;
+    email: string;
+    role: string;
+    specialty: string;
+    baseConsultationFee: number;
+    address: string;
+    telephone: string;
+    clinicId?: number;
+}
+
+export function DoctorsClient(): React.JSX.Element {
+    const [page, setPage] = React.useState(0);
+    const [rowsPerPage, setRowsPerPage] = React.useState(10);
+    const [doctors, setDoctors] = React.useState<DoctorRecord[]>([]);
+    const [searchTerm, setSearchTerm] = React.useState('');
+    const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+    const [selectedDoctor, setSelectedDoctor] = React.useState<DoctorRecord | null>(null);
+
+    const fetchDoctors = async (mounted = true) => {
+        try {
+            const response = await apiClient.get('/Users');
+            if (mounted) {
+                setDoctors(response.data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch doctors:', error);
+        }
+    };
+
+    React.useEffect(() => {
+        let isMounted = true;
+        fetchDoctors(isMounted);
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    const filteredDoctors = React.useMemo(() => {
+        if (!searchTerm) {
+            return doctors;
+        }
+
+        const lowerTerm = searchTerm.toLowerCase();
+        return doctors.filter((doc) => {
+            return doc.fullName?.toLowerCase().includes(lowerTerm) ||
+                doc.specialty?.toLowerCase().includes(lowerTerm);
+        });
+    }, [doctors, searchTerm]);
+
+    const paginatedDoctors = filteredDoctors.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+    return (
+        <Stack spacing={3}>
+            <Stack direction="row" spacing={3}>
+                <Stack spacing={1} sx={{ flex: '1 1 auto' }}>
+                    <Typography variant="h4">Doctors & Staff</Typography>
+                </Stack>
+                <div>
+                    <Button
+                        startIcon={<PlusIcon fontSize="var(--icon-fontSize-md)" />}
+                        variant="contained"
+                        onClick={() => setIsDialogOpen(true)}
+                    >
+                        New Doctor
+                    </Button>
+                </div>
+            </Stack>
+
+            <DoctorsFilters
+                searchTerm={searchTerm}
+                onSearch={(term: string) => {
+                    setSearchTerm(term);
+                    setPage(0); // Reset page on search
+                }}
+            />
+
+            <DoctorsTable
+                count={filteredDoctors.length}
+                page={page}
+                rows={paginatedDoctors}
+                rowsPerPage={rowsPerPage}
+                onPageChange={(p: number) => setPage(p)}
+                onRowsPerPageChange={(r: number) => {
+                    setRowsPerPage(r);
+                    setPage(0);
+                }}
+                onEdit={(doctor) => { setSelectedDoctor(doctor); setIsDialogOpen(true); }}
+            />
+
+            <DoctorDialog
+                open={isDialogOpen}
+                doctor={selectedDoctor ?? undefined}
+                onClose={() => { setIsDialogOpen(false); setSelectedDoctor(null); }}
+                onSuccess={() => {
+                    setIsDialogOpen(false);
+                    setSelectedDoctor(null);
+                    fetchDoctors(true);
+                }}
+            />
+        </Stack>
+    );
+}

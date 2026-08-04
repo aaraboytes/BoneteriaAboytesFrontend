@@ -1,0 +1,6 @@
+Appointments Status,,,,,,,,,
+,,,,,,,,,
+Date,Total,Scheduled,Delayed,Waiting,In Progress,Done,Canceled,Absent,Rescheduled
+{day},{total},{scheduledAmount},{delayedAmount},{waitingAmount},{inProgressAmount},{doneAmount},{canceledAmount},{absentAmount},{rescheduledAmount}
+,,,,,,,,,
+Total,{totalSum},{scheduledSum},{delayedSum},{waitingSum},{inProgressSum},{doneSum},{canceledSum},{absentSum},{rescheduledSum}

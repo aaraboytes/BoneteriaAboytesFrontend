@@ -1,0 +1,9 @@
+,,,,,,,,,,,,,,,
+ Cash Register Closings,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+General Data,,Initial Funds,,,Payments,,,,,Withdrawals,,,End Funds,Person in charge,
+ID,Date,Cash,Card,Transfer,Transactions,Cash,Card,Transfer,Total,Cash,Debit,Transfer,Cash,User,Comments
+{cashClosingId},{date},{ifCash},{ifCard},{ifTransfer},{payTransactions},{payCash},{payCard},{payTransfer},{payTotal},{wdCash},{wdDebit},{wdTransfer},{efCash},{username},{comments}
+,,,,,,,,,,,,,,,
+,,{ifCashSum},{ifCardSum},{ifTransferSum},{payTransactionsSum},{payCashSum},{payCardSum},{payTransferSum},{payTotalSum},{wdCashSum},{wdDebitSum},{wdTransferSum},{efCashSum},,
+,,,,,,,,,,,,,,,

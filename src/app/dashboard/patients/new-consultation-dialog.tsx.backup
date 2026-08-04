@@ -1,0 +1,2493 @@
+import * as React from 'react';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Box from '@mui/material/Box';
+import MenuItem from '@mui/material/MenuItem';
+import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
+import Autocomplete from '@mui/material/Autocomplete';
+import Slider from '@mui/material/Slider';
+import { Plus as PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
+import { Trash as TrashIcon } from '@phosphor-icons/react/dist/ssr/Trash';
+import { FileText as FileTextIcon } from '@phosphor-icons/react/dist/ssr/FileText';
+import { LocalizationProvider, DatePicker, TimePicker } from '@mui/x-date-pickers';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs, { Dayjs } from 'dayjs';
+import apiClient from '@/lib/api-client';
+import { useUser } from '@/hooks/use-user';
+import type { Consultation, Indication } from './consultations-list-view';
+import type { PatientRecord } from './patient-types';
+import { AddContactDialog, type ContactRecord } from '../contacts/add-contact-dialog';
+import { ClinicalHistoryDialog } from './clinical-history-dialog';
+import { DocxGenerator } from '@/lib/docx-generator';
+import { Printer as PrinterIcon } from '@phosphor-icons/react/dist/ssr/Printer';
+import { PencilSimple as EditIcon } from '@phosphor-icons/react/dist/ssr/PencilSimple';
+import Switch from '@mui/material/Switch';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
+import Select from '@mui/material/Select';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import ListItemText from '@mui/material/ListItemText';
+import OutlinedInput from '@mui/material/OutlinedInput';
+import Divider from '@mui/material/Divider';
+import Chip from '@mui/material/Chip';
+import Collapse from '@mui/material/Collapse';
+import Accordion from '@mui/material/Accordion';
+import Grid from '@mui/material/Grid';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Paper from '@mui/material/Paper';
+import { CaretDown as CaretDownIcon } from '@phosphor-icons/react/dist/ssr/CaretDown';
+import { MuscleSelector } from '@/components/dashboard/services/muscle-selector';
+interface FastTextFieldProps extends Omit<React.ComponentProps<typeof TextField>, 'onChange'> {
+    value: string;
+    onChange: (val: string) => void;
+}
+
+function FastTextField({ value, onChange, ...rest }: FastTextFieldProps) {
+    const [localValue, setLocalValue] = React.useState(value);
+
+    React.useEffect(() => {
+        setLocalValue(value);
+    }, [value]);
+
+    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const val = e.target.value;
+        setLocalValue(val);
+
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
+
+        timeoutRef.current = setTimeout(() => {
+            onChange(val);
+        }, 150);
+    };
+
+    const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
+        onChange(e.target.value);
+        if (rest.onBlur) {
+            rest.onBlur(e);
+        }
+    };
+
+    React.useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+            }
+        };
+    }, []);
+
+    return (
+        <TextField
+            {...rest}
+            value={localValue}
+            onChange={handleChange}
+            onBlur={handleBlur}
+        />
+    );
+}
+
+interface NewConsultationDialogProps {
+    open: boolean;
+    patientId: number;
+    mode?: 'create' | 'view' | 'edit';
+    consultation?: Consultation | null;
+    onClose: () => void;
+    onSuccess: (keepOpen?: boolean) => void;
+}
+
+interface User {
+    id: number;
+    fullName: string;
+}
+
+const ASSESSMENT_AREAS = ['Left', 'Right', 'Other', 'Central', 'Bilateral'];
+const colorsMap = {
+    Green: { bg: '#e8f5e9', text: '#2e7d32', border: '#a5d6a7' },
+    Yellow: { bg: '#fffde7', text: '#f57f17', border: '#fff59d' },
+    Orange: { bg: '#fff3e0', text: '#e65100', border: '#ffcc80' },
+    Red: { bg: '#ffebee', text: '#c62828', border: '#ffcdd2' }
+};
+const getDiff = (left: number | '', right: number | '') => {
+    if (left === '' || right === '') return '-';
+    return Math.abs(Number(left) - Number(right)).toFixed(1);
+};
+const ASSESSMENT_MARCH = [
+    'Not evaluable', 'Complete phases and variants', 'Pain reliever/Claudicant',
+    'Without initial contact', 'Without middle support', 'Without final support phase',
+    'Without initial balance', 'Without middle balance', 'Without final balance',
+    'With walking aid', 'Slow cadence', 'Active eye movement', 'Inactive eye movement'
+];
+const ASSESSMENT_TEMPERATURES = [
+    'Not evaluable', 'Without alteration', 'Hypothermia', 'Hyperthermia',
+    'Mild erythema', 'Moderate erythema', 'Intense erythema', 'Broken skin surface or abrasion'
+];
+const ASSESSMENT_MUSCLE_TONES = ['Not evaluable', 'Normal', 'Muscle hypotonia', 'Muscle hypertonia'];
+const ASSESSMENT_MUSCULAR_FORCES = [
+    '0: ZERO', '1: TRACE', '1+: TRACE (+)', '2-: POOR (-)', '2: POOR', '2+: POOR (+)',
+    '3-: FAIR (-)', '3: FAIR', '3+: FAIR (+)', '4-: GOOD (-)', '4: GOOD', '4+: GOOD (+)'
+];
+const ASSESSMENT_SENSITIVITIES = [
+    'NORMAL', 'NOT EVALUABLE', 'HYPOESTHESIA', 'HYPERESTHESIA', 'ANESTHESIA',
+    'PARESTHESIA', 'HYPOREFLEXIA', 'HYPERREFLEXIA'
+];
+const TROPHISM_OPTIONS = ['NORMAL MUSCLE TROPHISM', 'MUSCLE HYPOTROPHISM', 'MUSCLE HYPERTROPHISM'];
+interface ServiceRecord {
+    id: number;
+    name: string;
+    color?: string;
+    technologies: { id: number; name: string; }[];
+}
+
+export interface RecurrenceState {
+    repeatEvery: number;
+    repeatInterval: 'day' | 'week' | 'month' | 'year';
+    repeatDays: number[];
+    endType: 'never' | 'on' | 'after';
+    endDate?: string;
+    endOccurrences?: number;
+    repeatTimes?: Record<string, { start: string, end: string }>;
+}
+
+interface RehabSessionState {
+    id: string;
+    serviceIds: number[];
+    count: number;
+}
+
+const DAYS_OF_WEEK = [
+    { label: 'S', value: 0 },
+    { label: 'M', value: 1 },
+    { label: 'T', value: 2 },
+    { label: 'W', value: 3 },
+    { label: 'T', value: 4 },
+    { label: 'F', value: 5 },
+    { label: 'S', value: 6 },
+];
+
+
+interface AssessmentInput {
+    id: string;
+    area: string;
+    pain: number | '';
+    painObservations: string;
+    edema: string;
+    romS: string;
+    march: string;
+    temperature: string;
+    temperatureColoration: string;
+    muscleTone: string;
+    muscularForce: string;
+    sensitivity: string;
+    trophism: string;
+    trophismObservations: string;
+    recovery: number | '';
+    observations: string;
+    userId?: number;
+    user?: { id: number; fullName: string };
+}
+
+function calculateAge(birthDate?: string) {
+    if (!birthDate) return 'N/A';
+    const diff = Date.now() - new Date(birthDate).getTime();
+    const ageDate = new Date(diff);
+    return Math.abs(ageDate.getUTCFullYear() - 1970).toString();
+}
+
+export function NewConsultationDialog({ open, patientId, mode = 'create', consultation, onClose, onSuccess }: NewConsultationDialogProps): React.JSX.Element {
+    const { user } = useUser();
+
+    // Consultation form
+    const [selectedContactId, setSelectedContactId] = React.useState<number | ''>('');
+    const [reason, setReason] = React.useState('');
+    const [diagnostic, setDiagnostic] = React.useState('');
+    const [treatmentText, setTreatmentText] = React.useState('');
+    const [evolutionNotes, setEvolutionNotes] = React.useState('');
+    const [observations, setObservations] = React.useState('');
+    const [dateOfInjury, setDateOfInjury] = React.useState<Dayjs | null>(null);
+    const [nextAppointmentDate, setNextAppointmentDate] = React.useState<Dayjs | null>(null);
+    const [assessments, setAssessments] = React.useState<AssessmentInput[]>([]);
+    const [previousAssessments, setPreviousAssessments] = React.useState<any[]>([]);
+    const [expandedPrevAssessmentId, setExpandedPrevAssessmentId] = React.useState<number | string | null>(null);
+    
+    // Custom layout extensions
+    const [reference, setReference] = React.useState('');
+    const [interconsultation, setInterconsultation] = React.useState('');
+    const [indications, setIndications] = React.useState<Indication[]>([]);
+    const [patientRecord, setPatientRecord] = React.useState<PatientRecord | null>(null);
+    const [isClinicalHistoryOpen, setIsClinicalHistoryOpen] = React.useState(false);
+    
+    // Auxiliary Dialog states
+    const [indicationsDialogOpen, setIndicationsDialogOpen] = React.useState(false);
+    const [editingIndication, setEditingIndication] = React.useState<Indication | null>(null);
+    const [assessmentDialogOpen, setAssessmentDialogOpen] = React.useState(false);
+    const [editingAssessment, setEditingAssessment] = React.useState<AssessmentInput | null>(null);
+    // Rehabilitation Program Form
+    const [createRehabProgram, setCreateRehabProgram] = React.useState(false);
+    const [existingRehabProgramId, setExistingRehabProgramId] = React.useState<number | null>(null);
+    const [rehabName, setRehabName] = React.useState('');
+    const [rehabStatus, setRehabStatus] = React.useState('Active');
+    const [rehabMuscleGroups, setRehabMuscleGroups] = React.useState<string[]>([]);
+    const [clearScheduling, setClearScheduling] = React.useState(false);
+    
+    const generateId = () => Math.random().toString(36).substring(2, 9);
+    
+    const parseRecurrenceRule = (rule: any): { type: string; state: RecurrenceState } => {
+        const ruleData = rule || {};
+        const patternType = String(ruleData.patternType || ruleData.PatternType || '').toLowerCase();
+        const repeatEvery = Number(ruleData.repeatEvery ?? ruleData.RepeatEvery) || 1;
+        const daysOfWeek = ruleData.daysOfWeek || ruleData.DaysOfWeek;
+        const timePreferences = ruleData.timePreferences || ruleData.TimePreferences;
+        const maxOccurrences = ruleData.maxOccurrences ?? ruleData.MaxOccurrences;
+        const endDate = ruleData.endDate || ruleData.EndDate;
+
+        if (patternType === 'daily' && repeatEvery === 1 && !timePreferences && !daysOfWeek) {
+            return { type: 'daily', state: { repeatEvery: 1, repeatInterval: 'day', repeatDays: [], endType: 'never' } };
+        }
+        if (patternType === 'weekly' && repeatEvery === 1 && !timePreferences && daysOfWeek?.split(',').length <= 1) {
+            return { type: 'weekly', state: { repeatEvery: 1, repeatInterval: 'week', repeatDays: daysOfWeek?.split(',').map(Number).filter((n: any) => !isNaN(n)) || [], endType: 'never' } };
+        }
+        const days = daysOfWeek ? String(daysOfWeek).split(',').map(Number).filter((n: any) => !isNaN(n)) : [];
+        return {
+            type: 'custom',
+            state: {
+                repeatEvery,
+                repeatInterval: patternType === 'daily' ? 'day' : patternType === 'weekly' ? 'week' : 'month',
+                repeatDays: days,
+                endType: maxOccurrences ? 'after' : endDate ? 'on' : 'never',
+                endDate: endDate ? String(endDate).split('T')[0] : '',
+                endOccurrences: Number(maxOccurrences) || 1,
+                repeatTimes: timePreferences ? (typeof timePreferences === 'string' ? JSON.parse(timePreferences) : timePreferences) : undefined,
+            },
+        };
+    };
+    const [rehabSessions, setRehabSessions] = React.useState<RehabSessionState[]>([{ id: generateId(), serviceIds: [], count: 1 }]);
+    const [availableServices, setAvailableServices] = React.useState<ServiceRecord[]>([]);
+    
+    const [rehabRecurrenceType, setRehabRecurrenceType] = React.useState<string>('custom');
+    const [rehabRecurrenceState, setRehabRecurrenceState] = React.useState<RecurrenceState>({
+        repeatEvery: 1,
+        repeatInterval: 'week',
+        repeatDays: [], // Empty by default
+        endType: 'never',
+    });
+    const [rehabStartDate, setRehabStartDate] = React.useState<Dayjs>(dayjs());
+
+
+    // Prescriptions
+    const [prescriptionInputs, setPrescriptionInputs] = React.useState<{ id: string, text: string }[]>([]);
+
+
+
+    const [submitting, setSubmitting] = React.useState(false);
+    const [staffMembers, setStaffMembers] = React.useState<User[]>([]);
+    const [patientGender, setPatientGender] = React.useState<'male' | 'female'>('male');
+
+    // Contacts
+    const [contacts, setContacts] = React.useState<ContactRecord[]>([]);
+    const [isAddContactOpen, setIsAddContactOpen] = React.useState(false);
+
+    const loadContacts = React.useCallback(async () => {
+        try {
+            const res = await apiClient.get<ContactRecord[]>('Contacts');
+            setContacts(res.data);
+        } catch (error) {
+            console.error('Failed to load contacts', error);
+        }
+    }, []);
+
+    const loadPreviousAssessments = React.useCallback(async (pId: number, currentConsultationDateStr?: string, currentConsultationId?: number) => {
+        try {
+            const res = await apiClient.get<any[]>(`MedicalRecords/patients/${pId}/consultations`);
+            const list: any[] = [];
+            const curDate = currentConsultationDateStr ? dayjs(currentConsultationDateStr) : dayjs();
+            
+            res.data.forEach((c: any) => {
+                if (currentConsultationId && c.id === currentConsultationId) {
+                    return;
+                }
+                const cDate = dayjs(c.date);
+                if (cDate.isBefore(curDate) || (currentConsultationId && c.id !== currentConsultationId && cDate.isSame(curDate))) {
+                    if (c.assessments && c.assessments.length > 0) {
+                        c.assessments.forEach((a: any) => {
+                            list.push({
+                                ...a,
+                                consultationDate: c.date,
+                                consultationId: c.id,
+                                staffName: c.user?.fullName || a.user?.fullName || 'Person In Charge'
+                            });
+                        });
+                    }
+                }
+            });
+            list.sort((a, b) => dayjs(b.consultationDate).diff(dayjs(a.consultationDate)));
+            setPreviousAssessments(list);
+        } catch (error) {
+            console.error('Failed to load previous assessments', error);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (open) {
+            setCurrentMode(mode);
+            loadContacts();
+
+            const actualPatientId = patientId || consultation?.patientId || consultation?.patient?.id;
+            if (actualPatientId) {
+                const curDateStr = consultation?.date;
+                const curId = consultation?.id;
+                loadPreviousAssessments(actualPatientId, curDateStr, curId);
+            } else {
+                setPreviousAssessments([]);
+            }
+            if (consultation) {
+                setSelectedContactId(consultation.contactId || '');
+                setReason(consultation.reasonForConsultation || '');
+                setDiagnostic(consultation.diagnostic || '');
+                setTreatmentText(consultation.treatmentText || '');
+                setEvolutionNotes(consultation.evolutionNotes || '');
+                setObservations(consultation.observations || '');
+                setDateOfInjury(consultation.dateOfInjury ? dayjs(consultation.dateOfInjury) : null);
+                setNextAppointmentDate(consultation.nextAppointmentDate ? dayjs(consultation.nextAppointmentDate) : null);
+                setReference(consultation.reference || '');
+                setInterconsultation(consultation.interconsultation || '');
+                setIndications(consultation.indications || []);
+                setAssessments(consultation.assessments?.map((a: any) => ({
+                    id: a.id?.toString() || Date.now().toString() + Math.random().toString(),
+                    area: a.area || '',
+                    pain: a.pain ?? '',
+                    painObservations: a.painObservations || '',
+                    edema: a.edema || '',
+                    romS: a.romS || '',
+                    march: a.march || a.movement || '',
+                    temperature: a.temperature || '',
+                    temperatureColoration: a.temperatureColoration || '',
+                    muscleTone: a.muscleTone || '',
+                    muscularForce: a.muscularForce || '',
+                    sensitivity: a.sensitivityAndReflexes || '',
+                    trophism: a.trophism || '',
+                    trophismObservations: a.trophismObservations || '',
+                    recovery: a.recovery ?? '',
+                    observations: a.observations || '',
+                    userId: a.userId,
+                    user: a.user
+                })) || []);
+                setSelectedStaffId(consultation.userId || user?.id || '');
+
+
+
+                setRehabMuscleGroups(consultation.muscleGroups ? (consultation.muscleGroups as string).split(',') : []);
+                if (consultation.rehabilitationPrograms && consultation.rehabilitationPrograms.length > 0) {
+                    const existingProgram = consultation.rehabilitationPrograms[0] as any;
+                    setExistingRehabProgramId(existingProgram.id);
+                    setRehabName(existingProgram.name || '');
+                    setRehabStatus(existingProgram.status || 'Active');
+                    if (existingProgram.sessions) {
+                        setRehabSessions(existingProgram.sessions.map((s: any) => ({
+                            id: s.id || generateId(),
+                            serviceIds: (s.services || []).map((srv: any) => srv.id),
+                            count: 1
+                        })));
+                    }
+                    if (existingProgram.recurrenceRule) {
+                        const parsed = parseRecurrenceRule(existingProgram.recurrenceRule);
+                        setRehabRecurrenceType(parsed.type);
+                        setRehabRecurrenceState(parsed.state);
+                    } else {
+                        setRehabRecurrenceType('none');
+                    }
+                    setRehabStartDate(existingProgram.startDate ? dayjs(existingProgram.startDate) : dayjs());
+                    setClearScheduling(false);
+                } else {
+                    setExistingRehabProgramId(null);
+                    setCreateRehabProgram(false);
+                    setRehabName('');
+                    setRehabStatus('Active');
+                    setRehabMuscleGroups([]);
+                    setRehabSessions([{ id: generateId(), serviceIds: [], count: 1 }]);
+                    setRehabRecurrenceType('custom');
+                    setRehabStartDate(dayjs());
+                    setClearScheduling(false);
+                }
+            } else {
+                setSelectedContactId('');
+                setReason('');
+                setDiagnostic('');
+                setTreatmentText('');
+                setEvolutionNotes('');
+                setObservations('');
+                setDateOfInjury(null);
+                setNextAppointmentDate(null);
+                setSelectedStaffId(user?.id || '');
+                setAssessments([]);
+                setPrescriptionInputs([]);
+                setReference('');
+                setInterconsultation('');
+                setIndications([]);
+                
+
+                
+                setExistingRehabProgramId(null);
+                setCreateRehabProgram(false);
+                setRehabName('');
+                setRehabStatus('Active');
+                setRehabMuscleGroups([]);
+                setRehabSessions([{ id: generateId(), serviceIds: [], count: 1 }]);
+                setRehabRecurrenceType('custom');
+                setRehabStartDate(dayjs());
+            }
+
+            if (consultation?.prescriptions) {
+                setPrescriptionInputs(consultation.prescriptions.map(p => ({
+                    id: p.id.toString(),
+                    text: p.prescriptionText
+                })));
+            }
+
+            // Fetch staff members
+            apiClient.get<User[]>('Users')
+                .then(res => setStaffMembers(res.data))
+                .catch(err => console.error('Failed to fetch staff members', err));
+            // Fetch services for rehab program
+            apiClient.get<ServiceRecord[]>('/Services').then(res => {
+                setAvailableServices(res.data);
+            }).catch(err => {
+                console.error('Failed to fetch services', err);
+            });
+
+            if (consultation?.patient) {
+                setPatientGender(consultation.patient.gender?.toLowerCase() === 'female' ? 'female' : 'male');
+                setPatientRecord(consultation.patient as any);
+            } else if (patientId) {
+                apiClient.get<PatientRecord>(`Patients/${patientId}`).then(res => {
+                    setPatientGender(res.data.gender?.toLowerCase() === 'female' ? 'female' : 'male');
+                    setPatientRecord(res.data);
+                }).catch(err => console.error('Failed to fetch patient', err));
+            } else {
+                setPatientRecord(null);
+            }
+
+        }
+    }, [open, user, consultation, mode, patientId, loadPreviousAssessments]);
+
+    const [currentMode, setCurrentMode] = React.useState<'create' | 'view' | 'edit'>(mode);
+    const isView = currentMode === 'view';
+    const [selectedStaffId, setSelectedStaffId] = React.useState<number | ''>('');
+
+    
+    const handleCloneSession = (index: number) => {
+        const source = rehabSessions[index];
+        const newSession: RehabSessionState = {
+            id: generateId(),
+            serviceIds: [...source.serviceIds],
+            count: source.count
+        };
+        const newSessions = [...rehabSessions];
+        newSessions.splice(index + 1, 0, newSession);
+        setRehabSessions(newSessions);
+    };
+
+    const handleRemoveSession = (id: string) => {
+        setRehabSessions(rehabSessions.filter(s => s.id !== id));
+    };
+
+    const handleSessionChange = (id: string, field: keyof RehabSessionState, value: any) => {
+        setRehabSessions(rehabSessions.map(s => s.id === id ? { ...s, [field]: value } : s));
+    };
+
+    const uniqueTechnologies = React.useMemo(() => {
+        const techMap = new Map<number, string>();
+        rehabSessions.forEach(session => {
+            session.serviceIds.forEach(serviceId => {
+                const service = availableServices.find(s => s.id === serviceId);
+                if (service && service.technologies) {
+                    service.technologies.forEach(tech => {
+                        techMap.set(tech.id, tech.name);
+                    });
+                }
+            });
+        });
+        return Array.from(techMap.values());
+    }, [rehabSessions, availableServices]);
+
+    const simulatedDates = React.useMemo(() => {
+        const totalCount = rehabSessions.reduce((acc, s) => acc + s.count, 0);
+        const hasNoDays = rehabRecurrenceType === 'custom' && rehabRecurrenceState.repeatInterval === 'week' && rehabRecurrenceState.repeatDays.length === 0;
+        if (totalCount === 0 || rehabRecurrenceType === 'none' || hasNoDays) return [];
+
+        const dates: dayjs.Dayjs[] = [];
+        let currentDate = rehabStartDate.clone();
+        
+        while (dates.length < totalCount) {
+            let matches = false;
+            
+            if (rehabRecurrenceType === 'daily') {
+                matches = true;
+            } else if (rehabRecurrenceType === 'weekly' || (rehabRecurrenceType === 'custom' && rehabRecurrenceState.repeatInterval === 'week')) {
+                const targetDays = rehabRecurrenceType === 'custom' ? rehabRecurrenceState.repeatDays : [];
+                if (rehabRecurrenceType === 'weekly') {
+                    matches = currentDate.day() >= 1 && currentDate.day() <= 5;
+                } else {
+                    matches = targetDays.includes(currentDate.day());
+                }
+            } else if (rehabRecurrenceType === 'custom' && rehabRecurrenceState.repeatInterval === 'day') {
+                matches = true;
+            }
+
+            if (matches) {
+                dates.push(currentDate.clone());
+            }
+
+            if (rehabRecurrenceType === 'daily' || (rehabRecurrenceType === 'custom' && rehabRecurrenceState.repeatInterval === 'day')) {
+                currentDate = currentDate.add(rehabRecurrenceType === 'custom' ? rehabRecurrenceState.repeatEvery : 1, 'day');
+            } else if (rehabRecurrenceType === 'weekly' || (rehabRecurrenceType === 'custom' && rehabRecurrenceState.repeatInterval === 'week')) {
+                currentDate = currentDate.add(1, 'day');
+                const repeatEvery = rehabRecurrenceType === 'custom' ? rehabRecurrenceState.repeatEvery : 1;
+                if (currentDate.day() === 0 && repeatEvery > 1) {
+                    currentDate = currentDate.add(7 * (repeatEvery - 1), 'day');
+                }
+            } else {
+                currentDate = currentDate.add(1, 'day');
+            }
+        }
+        return dates;
+    }, [rehabSessions, rehabRecurrenceType, rehabRecurrenceState, rehabStartDate]);
+
+    const handleAddAssessment = () => {
+        setAssessments(prev => [...prev, {
+            id: Date.now().toString() + Math.random().toString(),
+            area: '',
+            pain: 1,
+            painObservations: '',
+            edema: '',
+            romS: '',
+            march: '',
+            temperature: '',
+            temperatureColoration: '',
+            muscleTone: '',
+            muscularForce: '',
+            sensitivity: '',
+            trophism: 'normal muscle trophism',
+            trophismObservations: '',
+            recovery: 0,
+            observations: ''
+        }]);
+    };
+
+    const handleRemoveAssessment = (id: string) => {
+        setAssessments(prev => prev.filter(a => a.id !== id));
+    };
+
+    const handleAssessmentChange = (id: string, field: keyof AssessmentInput, value: any) => {
+        setAssessments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+    };
+
+    const handleSave = async () => {
+        if (!selectedStaffId) {
+            alert('Please select a staff member in charge.');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const payload = {
+                patientId,
+                userId: selectedStaffId,
+                contactId: selectedContactId === '' ? null : selectedContactId,
+                reasonForConsultation: reason,
+                diagnostic,
+                treatmentText,
+                evolutionNotes,
+                observations,
+                muscleGroups: rehabMuscleGroups.join(','),
+                dateOfInjury: dateOfInjury ? dateOfInjury.toISOString() : null,
+                nextAppointmentDate: nextAppointmentDate ? nextAppointmentDate.toISOString() : null,
+                reference: reference,
+                interconsultation: interconsultation,
+                indications: indications.map(i => ({
+                    tx0ServiceIds: i.tx0ServiceIds,
+                    txServiceIds: i.txServiceIds,
+                    periodicity: i.periodicity,
+                    nextAssessmentAfterSessions: Number(i.nextAssessmentAfterSessions) || 0,
+                    discharge: i.discharge,
+                    observations: i.observations
+                })),
+                assessments: assessments.map(a => ({
+                    area: a.area,
+                    pain: Number(a.pain) || 0,
+                    painObservations: a.painObservations,
+                    edema: a.edema,
+                    romS: a.romS,
+                    march: a.march,
+                    temperature: a.temperature,
+                    temperatureColoration: a.temperatureColoration,
+                    muscleTone: a.muscleTone,
+                    muscularForce: a.muscularForce,
+                    sensitivityAndReflexes: a.sensitivity,
+                    trophism: a.trophism,
+                    trophismObservations: a.trophismObservations,
+                    recovery: Number(a.recovery) || 0,
+                    observations: a.observations,
+                    userId: a.userId || selectedStaffId || null
+                })),
+                prescriptions: prescriptionInputs.filter(p => p.text.trim()).map(p => ({
+                    prescriptionText: p.text
+                }))
+            };
+
+            let savedConsultationId = currentMode === 'edit' && consultation ? consultation.id : null;
+            
+            if (currentMode === 'edit' && consultation) {
+                await apiClient.put(`MedicalRecords/consultations/${consultation.id}`, payload);
+            } else {
+                const res = await apiClient.post(`MedicalRecords/consultations`, payload);
+                savedConsultationId = res.data.id;
+            }
+            
+            // After saving consultation, check if we need to create or update a rehab program
+            if (createRehabProgram || existingRehabProgramId) {
+                const finalSessions: any[] = [];
+                rehabSessions.forEach(s => {
+                    for (let i = 0; i < s.count; i++) {
+                        finalSessions.push({ serviceIds: s.serviceIds });
+                    }
+                });
+
+                const rehabPayload: any = {
+                    name: rehabName || `Programa de Rehabilitación - ${new Date().toLocaleDateString()}`,
+                    status: rehabStatus,
+                    sessions: finalSessions,
+                    consultationId: savedConsultationId
+                };
+
+                const hasRecurrence = !clearScheduling && rehabRecurrenceType !== 'none' && (rehabRecurrenceType !== 'custom' || rehabRecurrenceState.repeatDays.length > 0);
+                if (hasRecurrence) {
+                    rehabPayload.recurrence = {
+                        patternType: rehabRecurrenceType === 'custom' ? (rehabRecurrenceState.repeatInterval === 'day' ? 'daily' : rehabRecurrenceState.repeatInterval === 'week' ? 'weekly' : 'monthly') : (rehabRecurrenceType === 'daily' ? 'daily' : 'weekly'),
+                        repeatEvery: rehabRecurrenceType === 'custom' ? rehabRecurrenceState.repeatEvery : 1,
+                        daysOfWeek: rehabRecurrenceType === 'custom' ? rehabRecurrenceState.repeatDays.join(',') : '',
+                        startDate: rehabStartDate.format('YYYY-MM-DDTHH:mm:ss'),
+                        maxOccurrences: rehabRecurrenceType === 'custom' && rehabRecurrenceState.endType === 'after' ? rehabRecurrenceState.endOccurrences : null,
+                        endDate: rehabRecurrenceType === 'custom' && rehabRecurrenceState.endType === 'on' ? rehabRecurrenceState.endDate : null,
+                        timePreferences: rehabRecurrenceType === 'custom' && rehabRecurrenceState.repeatTimes ? JSON.stringify(rehabRecurrenceState.repeatTimes) : null
+                    };
+                }
+
+                rehabPayload.clearRecurrence = clearScheduling;
+
+                try {
+                    if (existingRehabProgramId) {
+                        await apiClient.put(`/Patients/${patientId}/rehabilitation-programs/${existingRehabProgramId}`, rehabPayload);
+                    } else {
+                        await apiClient.post(`/Patients/${patientId}/rehabilitation-programs`, rehabPayload);
+                    }
+                } catch (error) {
+                    console.error('Failed to save rehab program', error);
+                    alert('Consultation saved, but failed to save Rehabilitation Program.');
+                }
+            }
+
+            if (currentMode === 'edit') {
+                onSuccess(true);
+                setCurrentMode('view');
+            } else {
+                onSuccess(false);
+            }
+        } catch (error) {
+            console.error('Failed to save consultation', error);
+            alert('Failed to save consultation');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handlePrintDocx = async () => {
+        if (!consultation || !consultation.patient) return;
+
+        const patient = consultation.patient;
+        const patientName = `${patient.firstName} ${patient.lastName}`.trim();
+        const patientAge = calculateAge(patient.birthDate);
+        const consultationDate = dayjs(consultation.date).format('DD/MM/YYYY');
+        const injuryDate = consultation.dateOfInjury ? dayjs(consultation.dateOfInjury).format('DD/MM/YYYY') : 'N/A';
+        const nextAppointmentDateFormatted = consultation.nextAppointmentDate ? dayjs(consultation.nextAppointmentDate).format('DD/MM/YYYY') : 'N/A';
+        const contactName = consultation.contact ? `${consultation.contact.firstName} ${consultation.contact.lastName}`.trim() : 'N/A';
+
+        // Helper to provide PascalCase keys for template compatibility
+        const toPascalCase = (obj: Record<string, any>) => {
+            const result: Record<string, any> = {};
+            Object.keys(obj).forEach(key => {
+                const pascalKey = key.charAt(0).toUpperCase() + key.slice(1);
+                result[pascalKey] = obj[key];
+            });
+            return result;
+        };
+
+        const data = {
+            // Assessments
+            assessments: consultation.assessments?.map((a, i) => ({
+                index: i + 1,
+                ...a,
+                ...toPascalCase(a)
+            })) || [],
+
+            // Spread all properties first
+            ...consultation,
+            ...toPascalCase(consultation),
+
+            // Override with formatted/explicit values
+            name: patientName,
+            fullName: patientName,
+            NombrePaciente: patientName,
+            reference: contactName,
+            Referencia: contactName,
+            patientAge,
+            age: patientAge,
+            date: consultationDate,
+            Fecha: consultationDate,
+            day: dayjs(consultation.date).date(),
+            month: dayjs(consultation.date).month() + 1,
+            year: dayjs(consultation.date).year(),
+            dateOfInjury: injuryDate,
+            FechaLesion: injuryDate,
+            nextAppointmentDate: nextAppointmentDateFormatted,
+            ProximaCita: nextAppointmentDateFormatted,
+            reason: consultation.reasonForConsultation,
+            Motivo: consultation.reasonForConsultation,
+            diagnostic: consultation.diagnostic,
+            Diagnostico: consultation.diagnostic,
+            treatment: consultation.treatmentText,
+            Tratamiento: consultation.treatmentText,
+            evolution: consultation.evolutionNotes,
+            Evolucion: consultation.evolutionNotes,
+            observations: consultation.observations,
+            Observaciones: consultation.observations,
+            doctorName: consultation.user?.fullName || '',
+            Doctor: consultation.user?.fullName || '',
+
+            patient: {
+                ...patient,
+                ...toPascalCase(patient),
+                fullName: patientName,
+                age: patientAge,
+                birthDate: patient.birthDate ? dayjs(patient.birthDate).format('DD/MM/YYYY') : 'N/A',
+                FechaNacimiento: patient.birthDate ? dayjs(patient.birthDate).format('DD/MM/YYYY') : 'N/A'
+            }
+        };
+
+        try {
+            await DocxGenerator.generateFromTemplate('/templates/ConsultationTemplate.docx', data, `Consulta_${patient.lastName}_${consultationDate}`);
+        } catch (err) {
+            console.error(err);
+            alert('Error al generar el formato de consulta. Verifique que la plantilla exista.');
+        }
+    };
+    const handleSaveIndication = (data: Omit<Indication, 'id' | 'consultationId'>) => {
+        if (editingIndication) {
+            setIndications(prev => prev.map(i => i === editingIndication ? { ...i, ...data } : i));
+        } else {
+            setIndications(prev => [...prev, data as Indication]);
+        }
+        setIndicationsDialogOpen(false);
+        setEditingIndication(null);
+    };
+
+    const handleSaveAssessmentSub = (data: Omit<AssessmentInput, 'id'>) => {
+        if (editingAssessment) {
+            setAssessments(prev => prev.map(a => a.id === editingAssessment.id ? { ...a, ...data } : a));
+        } else {
+            setAssessments(prev => [...prev, {
+                id: Date.now().toString() + Math.random().toString(),
+                ...data
+            }]);
+        }
+        setAssessmentDialogOpen(false);
+        setEditingAssessment(null);
+    };
+
+    const [expandedAssessmentId, setExpandedAssessmentId] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (assessments.length > 0 && !expandedAssessmentId) {
+            setExpandedAssessmentId(assessments[0].id);
+        }
+    }, [assessments, expandedAssessmentId]);
+
+    const handlePrintEvolutionNotes = () => {
+        alert('Print Evolution Notes: Template not created yet (TODO).');
+    };
+    const handlePrintInterconsultation = () => {
+        alert('Print Interconsultation: Template not created yet (TODO).');
+    };
+    const handlePrintPrescription = (idx: number) => {
+        alert(`Print Prescription #${idx + 1}: Template not created yet (TODO).`);
+    };
+    const handleGenerateValuationFormat = () => {
+        alert('Generate valuation format: Template not created yet (TODO).');
+    };
+    const handleMedicalNotePlaceholder = () => {
+        alert('Medical note: Template not created yet (TODO).');
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
+            <DialogTitle sx={{ display: 'none' }}>
+                {/* Visual Title is rendered inside header box */}
+                Consultation details
+            </DialogTitle>
+            <DialogContent sx={{ p: 3, bgcolor: '#f4f5f7' }}>
+                <Stack spacing={3}>
+                    {/* TOP DETAILS HEADER BOX */}
+                    <Paper 
+                        elevation={0} 
+                        sx={{ 
+                            p: 3, 
+                            border: '1.5px solid #cbd5e1', 
+                            borderRadius: 2, 
+                            bgcolor: '#f8fafc',
+                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)'
+                        }}
+                    >
+                        <Stack spacing={2}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ flexWrap: 'wrap', gap: 2 }}>
+                                <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                                    Consultation: {consultation?.id || 'New'}
+                                </Typography>
+                                <Button 
+                                    variant="contained" 
+                                    color="secondary" 
+                                    size="small"
+                                    onClick={() => setIsClinicalHistoryOpen(true)}
+                                    disabled={!patientRecord}
+                                    sx={{ textTransform: 'none', borderRadius: 1.5 }}
+                                >
+                                    Read antecedents
+                                </Button>
+                            </Stack>
+
+                            <Divider />
+
+                            <Stack spacing={1}>
+                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                    Name: <span style={{ fontWeight: 700, color: '#0f172a' }}>{patientRecord ? `${patientRecord.firstName} ${patientRecord.lastName}` : 'Loading...'}</span>
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                    Age: <span style={{ fontWeight: 700, color: '#0f172a' }}>{patientRecord ? calculateAge(patientRecord.birthDate) : '...'}</span>
+                                </Typography>
+                            </Stack>
+
+                            <Box sx={{ mt: 2 }}>
+                                <Grid container spacing={2}>
+                                    <Grid size={{ xs: 12, md: 6 }}>
+                                        <TextField 
+                                            label="Reference" 
+                                            placeholder="Consultation Title / Reference" 
+                                            value={reference} 
+                                            onChange={(e) => setReference(e.target.value)} 
+                                            fullWidth 
+                                            slotProps={{ input: { readOnly: isView } }}
+                                        />
+                                    </Grid>
+                                    <Grid size={{ xs: 12, md: 6 }}>
+                                        <Autocomplete
+                                            options={contacts}
+                                            getOptionLabel={(o) => `${o.firstName} ${o.lastName}`.trim()}
+                                            getOptionKey={(o) => o.id}
+                                            isOptionEqualToValue={(option, value) => option.id === value.id}
+                                            value={contacts.find(c => c.id === selectedContactId) || null}
+                                            onChange={(event, newValue) => {
+                                                setSelectedContactId(newValue ? newValue.id : '');
+                                            }}
+                                            disabled={isView}
+                                            renderInput={(params) => <TextField {...params} label="Medic" fullWidth />}
+                                        />
+                                    </Grid>
+                                    
+                                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                                        <Grid size={{ xs: 12, md: 6 }}>
+                                            <DatePicker
+                                                label="Date Time (Today)"
+                                                value={consultation ? dayjs(consultation.date) : dayjs()}
+                                                readOnly={true}
+                                                format="DD/MM/YYYY"
+                                                slotProps={{ textField: { fullWidth: true } }}
+                                            />
+                                        </Grid>
+                                        <Grid size={{ xs: 12, md: 6 }}>
+                                            <DatePicker
+                                                label="Next medical appt."
+                                                value={nextAppointmentDate}
+                                                onChange={(newValue) => setNextAppointmentDate(newValue)}
+                                                format="DD/MM/YYYY"
+                                                readOnly={isView}
+                                                slotProps={{ textField: { fullWidth: true } }}
+                                            />
+                                        </Grid>
+                                    </LocalizationProvider>
+                                </Grid>
+                            </Box>
+
+                            <Stack direction="row" spacing={2} sx={{ mt: 1, justifyContent: 'flex-start' }}>
+                                <Button 
+                                    variant="outlined" 
+                                    color="primary"
+                                    onClick={handleGenerateValuationFormat}
+                                    sx={{ textTransform: 'none', borderRadius: 1.5 }}
+                                >
+                                    Generate valuation format
+                                </Button>
+                                <Button 
+                                    variant="outlined" 
+                                    color="primary"
+                                    onClick={handleMedicalNotePlaceholder}
+                                    sx={{ textTransform: 'none', borderRadius: 1.5 }}
+                                >
+                                    Medical note
+                                </Button>
+                            </Stack>
+                        </Stack>
+                    </Paper>
+
+                    {/* SECTION 1: CONSULTATION DETAILS */}
+                    <Paper elevation={0} sx={{ p: 3, border: '1.5px solid #cbd5e1', borderRadius: 2 }}>
+                        <Stack spacing={3}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between">
+                                <Typography variant="h6" sx={{ fontWeight: 700, color: '#334155' }}>
+                                    Consultation details
+                                </Typography>
+                                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                                    <DatePicker
+                                        label="Date of Injury"
+                                        value={dateOfInjury}
+                                        onChange={(newValue) => setDateOfInjury(newValue)}
+                                        format="DD/MM/YYYY"
+                                        readOnly={isView}
+                                        slotProps={{ textField: { size: 'small', sx: { maxWidth: 200 } } }}
+                                    />
+                                </LocalizationProvider>
+                            </Stack>
+
+                            <FastTextField 
+                                label="Reason for consultation" 
+                                value={reason} 
+                                onChange={setReason} 
+                                multiline 
+                                rows={4} 
+                                fullWidth 
+                                slotProps={{ input: { readOnly: isView } }} 
+                            />
+                            <FastTextField 
+                                label="Diagnostic" 
+                                value={diagnostic} 
+                                onChange={setDiagnostic} 
+                                multiline 
+                                rows={4} 
+                                fullWidth 
+                                slotProps={{ input: { readOnly: isView } }} 
+                            />
+
+                            {/* Muscle Selector */}
+                            <Box sx={{ mt: 2 }}>
+                                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>Affected Muscle Groups</Typography>
+                                <MuscleSelector
+                                    selectedMuscles={rehabMuscleGroups}
+                                    onChange={setRehabMuscleGroups}
+                                    gender={patientGender}
+                                    readonly={isView}
+                                />
+                            </Box>
+                        </Stack>
+                    </Paper>
+
+                    {/* SECTION 2: TREATMENT */}
+                    <Paper elevation={0} sx={{ p: 3, border: '1.5px solid #cbd5e1', borderRadius: 2 }}>
+                        <Stack spacing={3}>
+                            <Typography variant="h6" sx={{ fontWeight: 700, color: '#334155' }}>
+                                Treatment
+                            </Typography>
+                            
+                            <FastTextField 
+                                label="Terapy" 
+                                value={treatmentText} 
+                                onChange={setTreatmentText} 
+                                multiline 
+                                rows={4} 
+                                fullWidth 
+                                slotProps={{ input: { readOnly: isView } }} 
+                                helperText={mode === 'create' && treatmentText ? 'A new treatment record will be created automatically.' : ''}
+                            />
+                            
+                            <Box sx={{ position: 'relative' }}>
+                                <FastTextField 
+                                    label="Evolution notes" 
+                                    value={evolutionNotes} 
+                                    onChange={setEvolutionNotes} 
+                                    multiline 
+                                    rows={4} 
+                                    fullWidth 
+                                    slotProps={{ input: { readOnly: isView } }} 
+                                />
+                                <IconButton 
+                                    onClick={handlePrintEvolutionNotes} 
+                                    sx={{ position: 'absolute', bottom: 8, right: 8, color: 'text.secondary' }}
+                                    size="small"
+                                >
+                                    <PrinterIcon size={20} />
+                                </IconButton>
+                            </Box>
+
+                            <FastTextField 
+                                label="Observations" 
+                                value={observations} 
+                                onChange={setObservations} 
+                                multiline 
+                                rows={4} 
+                                fullWidth 
+                                slotProps={{ input: { readOnly: isView } }} 
+                            />
+                        </Stack>
+                    </Paper>
+
+                    {/* SECTION 3: INTERCONSULTATION */}
+                    <Paper elevation={0} sx={{ p: 3, border: '1.5px solid #cbd5e1', borderRadius: 2 }}>
+                        <Stack spacing={2}>
+                            <Typography variant="h6" sx={{ fontWeight: 700, color: '#334155' }}>
+                                Interconsultation
+                            </Typography>
+                            <Box sx={{ position: 'relative' }}>
+                                <FastTextField 
+                                    label="Interconsultation notes" 
+                                    value={interconsultation} 
+                                    onChange={setInterconsultation} 
+                                    multiline 
+                                    rows={4} 
+                                    fullWidth 
+                                    slotProps={{ input: { readOnly: isView } }} 
+                                />
+                                <IconButton 
+                                    onClick={handlePrintInterconsultation} 
+                                    sx={{ position: 'absolute', bottom: 8, right: 8, color: 'text.secondary' }}
+                                    size="small"
+                                >
+                                    <PrinterIcon size={20} />
+                                </IconButton>
+                            </Box>
+                        </Stack>
+                    </Paper>
+
+                    {/* SECTION 4: PRESCRIPTIONS */}
+                    <Paper elevation={0} sx={{ p: 3, border: '1.5px solid #cbd5e1', borderRadius: 2 }}>
+                        <Stack spacing={3}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between">
+                                <Typography variant="h6" sx={{ fontWeight: 700, color: '#334155' }}>
+                                    Prescriptions
+                                </Typography>
+                                {!isView && (
+                                    <Button
+                                        size="small"
+                                        variant="outlined"
+                                        startIcon={<PlusIcon />}
+                                        onClick={() => setPrescriptionInputs(prev => [...prev, { id: Math.random().toString(), text: '' }])}
+                                        sx={{ textTransform: 'none', borderRadius: 1.5 }}
+                                    >
+                                        Add Prescription
+                                    </Button>
+                                )}
+                            </Stack>
+
+                            <Stack spacing={2}>
+                                {prescriptionInputs.map((p, idx) => (
+                                    <Stack key={p.id} direction="row" spacing={2} alignItems="center">
+                                        {/* Circular Index Number */}
+                                        <Box 
+                                            sx={{ 
+                                                width: 32, 
+                                                height: 32, 
+                                                borderRadius: '50%', 
+                                                bgcolor: 'primary.main', 
+                                                color: 'primary.contrastText',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontWeight: 'bold',
+                                                flexShrink: 0
+                                            }}
+                                        >
+                                            {idx + 1}
+                                        </Box>
+                                        <TextField
+                                            label="Write the prescription"
+                                            value={p.text}
+                                            onChange={(e) => {
+                                                const newInputs = [...prescriptionInputs];
+                                                const index = newInputs.findIndex(item => item.id === p.id);
+                                                if (index !== -1) {
+                                                    newInputs[index].text = e.target.value;
+                                                    setPrescriptionInputs(newInputs);
+                                                }
+                                            }}
+                                            multiline
+                                            rows={2}
+                                            fullWidth
+                                            slotProps={{ input: { readOnly: isView } }}
+                                        />
+                                        <IconButton 
+                                            onClick={() => handlePrintPrescription(idx)}
+                                            color="primary"
+                                            size="small"
+                                        >
+                                            <PrinterIcon size={20} />
+                                        </IconButton>
+                                        {!isView && (
+                                            <IconButton size="small" color="error" onClick={() => setPrescriptionInputs(prev => prev.filter(item => item.id !== p.id))}>
+                                                <TrashIcon size={20} />
+                                            </IconButton>
+                                        )}
+                                    </Stack>
+                                ))}
+                                {prescriptionInputs.length === 0 && (
+                                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center' }}>
+                                        No prescriptions added yet. Click "+ Add Prescription" to write one.
+                                    </Typography>
+                                )}
+                            </Stack>
+                        </Stack>
+                    </Paper>
+
+                    {/* SECTION 5: INDICATIONS */}
+                    <Paper elevation={0} sx={{ p: 3, border: '1.5px solid #cbd5e1', borderRadius: 2 }}>
+                        <Stack spacing={3}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between">
+                                <Typography variant="h6" sx={{ fontWeight: 700, color: '#334155' }}>
+                                    Indications
+                                </Typography>
+                                {!isView && (
+                                    <Button
+                                        size="small"
+                                        variant="outlined"
+                                        startIcon={<PlusIcon />}
+                                        onClick={() => {
+                                            setEditingIndication(null);
+                                            setIndicationsDialogOpen(true);
+                                        }}
+                                        sx={{ textTransform: 'none', borderRadius: 1.5 }}
+                                    >
+                                        Add indications
+                                    </Button>
+                                )}
+                            </Stack>
+
+                            <Stack spacing={2}>
+                                {indications.length === 0 ? (
+                                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center' }}>
+                                        No indications added yet. Click "+ Add indications" to configure one.
+                                    </Typography>
+                                ) : (
+                                    indications.map((ind, idx) => {
+                                        const tx0Names = ind.tx0ServiceIds ? ind.tx0ServiceIds.split(',').map(idStr => {
+                                            const s = availableServices.find(srv => srv.id === parseInt(idStr));
+                                            return s ? s.name : `Service ${idStr}`;
+                                        }) : [];
+                                        const txNames = ind.txServiceIds ? ind.txServiceIds.split(',').map(idStr => {
+                                            const s = availableServices.find(srv => srv.id === parseInt(idStr));
+                                            return s ? s.name : `Service ${idStr}`;
+                                        }) : [];
+
+                                        return (
+                                            <Box 
+                                                key={idx} 
+                                                sx={{ 
+                                                    p: 2, 
+                                                    border: '1px solid #e2e8f0', 
+                                                    borderRadius: 1.5, 
+                                                    bgcolor: '#f8fafc',
+                                                    position: 'relative'
+                                                }}
+                                            >
+                                                <Stack spacing={1.5}>
+                                                    <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
+                                                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>TX 0:</Typography>
+                                                        {tx0Names.map((name, i) => <Chip key={i} label={name} size="small" sx={{ bgcolor: 'secondary.main', color: 'white' }} />)}
+                                                        {tx0Names.length === 0 && <Typography variant="caption" color="text.secondary">None</Typography>}
+                                                        
+                                                        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', ml: 2 }}>TX:</Typography>
+                                                        {txNames.map((name, i) => <Chip key={i} label={name} size="small" sx={{ bgcolor: 'primary.main', color: 'white' }} />)}
+                                                        {txNames.length === 0 && <Typography variant="caption" color="text.secondary">None</Typography>}
+                                                    </Stack>
+
+                                                    <Grid container spacing={2}>
+                                                        <Grid size={{ xs: 6, sm: 4 }}>
+                                                            <Typography variant="caption" color="text.secondary" display="block">Periodicity:</Typography>
+                                                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{ind.periodicity}</Typography>
+                                                        </Grid>
+                                                        <Grid size={{ xs: 6, sm: 4 }}>
+                                                            <Typography variant="caption" color="text.secondary" display="block">Next assessment after:</Typography>
+                                                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{ind.nextAssessmentAfterSessions} sessions</Typography>
+                                                        </Grid>
+                                                        <Grid size={{ xs: 6, sm: 4 }}>
+                                                            <Typography variant="caption" color="text.secondary" display="block">Discharge:</Typography>
+                                                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{ind.discharge ? 'Yes' : 'No'}</Typography>
+                                                        </Grid>
+                                                    </Grid>
+
+                                                    {ind.observations && (
+                                                        <Box sx={{ mt: 1 }}>
+                                                            <Typography variant="caption" color="text.secondary" display="block">Observations:</Typography>
+                                                            <Typography variant="body2">{ind.observations}</Typography>
+                                                        </Box>
+                                                    )}
+                                                </Stack>
+
+                                                {!isView && (
+                                                    <Stack direction="row" spacing={1} sx={{ position: 'absolute', top: 12, right: 12 }}>
+                                                        <IconButton 
+                                                            size="small" 
+                                                            onClick={() => {
+                                                                setEditingIndication(ind);
+                                                                setIndicationsDialogOpen(true);
+                                                            }}
+                                                        >
+                                                            <EditIcon size={18} />
+                                                        </IconButton>
+                                                        <IconButton 
+                                                            size="small" 
+                                                            color="error" 
+                                                            onClick={() => setIndications(prev => prev.filter((_, i) => i !== idx))}
+                                                        >
+                                                            <TrashIcon size={18} />
+                                                        </IconButton>
+                                                    </Stack>
+                                                )}
+                                            </Box>
+                                        );
+                                    })
+                                )}
+                            </Stack>
+                        </Stack>
+                    </Paper>
+
+                    {/* SECTION 6: ASSESSMENT */}
+                    <Paper elevation={0} sx={{ p: 3, border: '1.5px solid #cbd5e1', borderRadius: 2 }}>
+                        <Stack spacing={3}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between">
+                                <Typography variant="h6" sx={{ fontWeight: 700, color: '#334155' }}>
+                                    Assessment
+                                </Typography>
+                                {!isView && (
+                                    <Button
+                                        size="small"
+                                        variant="outlined"
+                                        startIcon={<PlusIcon />}
+                                        onClick={() => {
+                                            setEditingAssessment(null);
+                                            setAssessmentDialogOpen(true);
+                                        }}
+                                        sx={{ textTransform: 'none', borderRadius: 1.5 }}
+                                    >
+                                        Add assessment
+                                    </Button>
+                                )}
+                            </Stack>
+
+                            <Stack spacing={2}>
+                                {assessments.length === 0 ? (
+                                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center' }}>
+                                        No assessments added yet. Click "+ Add assessment" to configure one.
+                                    </Typography>
+                                ) : (
+                                    <Box>
+                                        {/* EXPANDED/CURRENT ASSESSMENT */}
+                                        {(() => {
+                                            const expandedAssessment = assessments.find(a => a.id === expandedAssessmentId) || assessments[0];
+                                            if (!expandedAssessment) return null;
+
+                                            const att = staffMembers.find(s => s.id === expandedAssessment.userId);
+                                            const attName = att ? att.fullName : 'Person In Charge';
+                                            const indexInList = assessments.findIndex(a => a.id === expandedAssessment.id);
+
+                                            return (
+                                                <Box 
+                                                    sx={{ 
+                                                        border: '1.5px solid #cbd5e1', 
+                                                        borderRadius: 2, 
+                                                        bgcolor: '#ffffff',
+                                                        mb: 3, 
+                                                        boxShadow: '0 2px 4px rgb(0 0 0 / 0.02)'
+                                                    }}
+                                                >
+                                                    {/* Expanded Header */}
+                                                    <Box sx={{ p: 2, bgcolor: '#f1f5f9', borderTopLeftRadius: 6, borderTopRightRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                                                            Assessment: {consultation ? dayjs(consultation.date).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')}
+                                                            <span style={{ fontWeight: 500, color: '#64748b', marginLeft: 8 }}>- {attName}</span>
+                                                        </Typography>
+                                                    </Box>
+
+                                                    {/* Expanded Content */}
+                                                    <Box sx={{ p: 3 }}>
+                                                        <Grid container spacing={2.5}>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Assessment Area: <span style={{ fontWeight: 700, color: '#0f172a' }}>{expandedAssessment.area || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Pain: <span style={{ fontWeight: 700, color: '#0f172a' }}>{expandedAssessment.pain !== '' ? `${expandedAssessment.pain}/10` : 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            {expandedAssessment.painObservations && (
+                                                                <Grid size={{ xs: 12 }}>
+                                                                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                        Pain Details: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.painObservations}</span>
+                                                                    </Typography>
+                                                                </Grid>
+                                                            )}
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Edema: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.edema || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    ROM S: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.romS || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Gait (March): <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.march || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Temperature: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.temperature || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Coloration: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.temperatureColoration || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Muscle Tone: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.muscleTone || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Muscle Strength (Force): <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.muscularForce || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Muscle Trophism: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.trophism || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            {expandedAssessment.trophismObservations && (
+                                                                <Grid size={{ xs: 12 }}>
+                                                                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                        Trophicity Details: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.trophismObservations}</span>
+                                                                    </Typography>
+                                                                </Grid>
+                                                            )}
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Sensation and Reflexes: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.sensitivity || 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            <Grid size={{ xs: 12, sm: 6 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                    Recovery: <span style={{ fontWeight: 700, color: 'primary.main' }}>{expandedAssessment.recovery !== '' ? `${expandedAssessment.recovery}%` : 'N/A'}</span>
+                                                                </Typography>
+                                                            </Grid>
+                                                            {expandedAssessment.observations && (
+                                                                <Grid size={{ xs: 12 }}>
+                                                                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                        Observations: <span style={{ fontWeight: 400, color: '#334155' }}>{expandedAssessment.observations}</span>
+                                                                    </Typography>
+                                                                </Grid>
+                                                            )}
+                                                        </Grid>
+
+                                                        {/* Expanded Footer / Actions */}
+                                                        {!isView && (
+                                                            <Stack direction="row" spacing={1} sx={{ mt: 3, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', pt: 2 }}>
+                                                                <IconButton 
+                                                                    size="small"
+                                                                    onClick={() => {
+                                                                        setEditingAssessment(expandedAssessment);
+                                                                        setAssessmentDialogOpen(true);
+                                                                    }}
+                                                                >
+                                                                    <EditIcon size={20} />
+                                                                </IconButton>
+                                                                <IconButton 
+                                                                    size="small" 
+                                                                    color="error" 
+                                                                    onClick={() => {
+                                                                        setAssessments(prev => prev.filter(a => a.id !== expandedAssessment.id));
+                                                                        if (assessments.length > 1) {
+                                                                            const remaining = assessments.filter(a => a.id !== expandedAssessment.id);
+                                                                            setExpandedAssessmentId(remaining[0]?.id || null);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <TrashIcon size={20} />
+                                                                </IconButton>
+                                                            </Stack>
+                                                        )}
+                                                    </Box>
+                                                </Box>
+                                            );
+                                        })()}
+
+                                        {/* OTHER ASSESSMENTS IN THIS CONSULTATION */}
+                                        {assessments.length > 1 && (
+                                            <Accordion sx={{ border: '1px solid #cbd5e1', borderRadius: 2, boxShadow: 'none', '&:before': { display: 'none' } }}>
+                                                <AccordionSummary expandIcon={<CaretDownIcon size={20} />}>
+                                                    <Typography sx={{ fontWeight: 700, color: '#475569' }}>Other Assessments in this Consultation</Typography>
+                                                </AccordionSummary>
+                                                <AccordionDetails sx={{ p: 2, bgcolor: '#f8fafc' }}>
+                                                    <Stack spacing={1.5}>
+                                                        {assessments.map((a) => {
+                                                            if (a.id === expandedAssessmentId) return null;
+                                                            const att = staffMembers.find(s => s.id === a.userId);
+                                                            const attName = att ? att.fullName : 'Person In Charge';
+                                                            return (
+                                                                <Box 
+                                                                    key={a.id} 
+                                                                    onClick={() => setExpandedAssessmentId(a.id)}
+                                                                    sx={{ 
+                                                                        p: 1.5, 
+                                                                        border: '1px solid #e2e8f0', 
+                                                                        borderRadius: 1, 
+                                                                        bgcolor: '#ffffff',
+                                                                        cursor: 'pointer',
+                                                                        '&:hover': { bgcolor: '#f1f5f9' },
+                                                                        display: 'flex',
+                                                                        justifyContent: 'space-between',
+                                                                        alignItems: 'center'
+                                                                    }}
+                                                                >
+                                                                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#334155' }}>
+                                                                        Assessment: {consultation ? dayjs(consultation.date).format('DD/MM/YYYY') : dayjs().format('DD/MM/YYYY')}
+                                                                        <span style={{ fontWeight: 500, color: '#64748b', marginLeft: 8 }}>- {attName}</span>
+                                                                    </Typography>
+                                                                    <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>
+                                                                        Expand
+                                                                    </Typography>
+                                                                </Box>
+                                                            );
+                                                        })}
+                                                    </Stack>
+                                                </AccordionDetails>
+                                            </Accordion>
+                                        )}
+                                    </Box>
+                                )}
+
+                                {/* PREVIOUS HISTORICAL ASSESSMENTS */}
+                                {previousAssessments.length > 0 && (
+                                    <Accordion sx={{ border: '1.5px solid #cbd5e1', borderRadius: 2, boxShadow: 'none', '&:before': { display: 'none' }, mt: 2 }}>
+                                        <AccordionSummary expandIcon={<CaretDownIcon size={20} />}>
+                                            <Typography sx={{ fontWeight: 700, color: '#475569' }}>Previous Assessments</Typography>
+                                        </AccordionSummary>
+                                        <AccordionDetails sx={{ p: 2, bgcolor: '#f8fafc' }}>
+                                            <Stack spacing={2}>
+                                                {previousAssessments.map((prevA) => {
+                                                    const isExpanded = expandedPrevAssessmentId === prevA.id;
+                                                    const formattedDate = dayjs(prevA.consultationDate).format('DD/MM/YYYY');
+                                                    return (
+                                                        <Box 
+                                                            key={prevA.id}
+                                                            sx={{ 
+                                                                border: '1px solid #e2e8f0', 
+                                                                borderRadius: 1.5, 
+                                                                bgcolor: '#ffffff',
+                                                                boxShadow: '0 1px 3px rgb(0 0 0 / 0.02)'
+                                                            }}
+                                                        >
+                                                            {/* Header item */}
+                                                            <Box 
+                                                                onClick={() => setExpandedPrevAssessmentId(isExpanded ? null : prevA.id)}
+                                                                sx={{ 
+                                                                    p: 2, 
+                                                                    cursor: 'pointer',
+                                                                    '&:hover': { bgcolor: '#f8fafc' },
+                                                                    display: 'flex',
+                                                                    justifyContent: 'space-between',
+                                                                    alignItems: 'center',
+                                                                    borderBottom: isExpanded ? '1px solid #e2e8f0' : 'none'
+                                                                }}
+                                                            >
+                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#334155' }}>
+                                                                    Assessment Date: <span style={{ fontWeight: 700, color: '#0f172a' }}>{formattedDate}</span>
+                                                                    <span style={{ fontWeight: 500, color: '#64748b', marginLeft: 8 }}>- Area: {prevA.area || 'N/A'} ({prevA.staffName})</span>
+                                                                </Typography>
+                                                                <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>
+                                                                    {isExpanded ? 'Collapse' : 'Expand'}
+                                                                </Typography>
+                                                            </Box>
+
+                                                            {/* Expanded Details */}
+                                                            {isExpanded && (
+                                                                <Box sx={{ p: 3, bgcolor: '#ffffff' }}>
+                                                                    <Grid container spacing={2.5}>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Assessment Area: <span style={{ fontWeight: 700, color: '#0f172a' }}>{prevA.area || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Pain: <span style={{ fontWeight: 700, color: '#0f172a' }}>{prevA.pain !== undefined && prevA.pain !== null && prevA.pain !== '' ? `${prevA.pain}/10` : 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        {prevA.painObservations && (
+                                                                            <Grid size={{ xs: 12 }}>
+                                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                    Pain Details: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.painObservations}</span>
+                                                                                </Typography>
+                                                                            </Grid>
+                                                                        )}
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Edema: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.edema || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                ROM S: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.romS || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Gait (March): <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.march || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Temperature: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.temperature || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Coloration: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.temperatureColoration || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Muscle Tone: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.muscleTone || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Muscle Strength (Force): <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.muscularForce || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Muscle Trophism: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.trophism || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        {prevA.trophismObservations && (
+                                                                            <Grid size={{ xs: 12 }}>
+                                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                    Trophicity Details: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.trophismObservations}</span>
+                                                                                </Typography>
+                                                                            </Grid>
+                                                                        )}
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Sensation and Reflexes: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.sensitivityAndReflexes || prevA.sensitivity || 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                Recovery: <span style={{ fontWeight: 700, color: 'primary.main' }}>{prevA.recovery !== undefined && prevA.recovery !== null && prevA.recovery !== '' ? `${prevA.recovery}%` : 'N/A'}</span>
+                                                                            </Typography>
+                                                                        </Grid>
+                                                                        {prevA.observations && (
+                                                                            <Grid size={{ xs: 12 }}>
+                                                                                <Typography variant="body2" sx={{ fontWeight: 600, color: '#475569' }}>
+                                                                                    Observations: <span style={{ fontWeight: 400, color: '#334155' }}>{prevA.observations}</span>
+                                                                                </Typography>
+                                                                            </Grid>
+                                                                        )}
+                                                                    </Grid>
+                                                                </Box>
+                                                            )}
+                                                        </Box>
+                                                    );
+                                                })}
+                                            </Stack>
+                                        </AccordionDetails>
+                                    </Accordion>
+                                )}
+                            </Stack>
+                        </Stack>
+                    </Paper>
+
+                    {/* REHABILITATION PROGRAM (Collapsible at bottom) */}
+                    <Accordion sx={{ border: '1.5px solid #cbd5e1', borderRadius: 2, boxShadow: 'none', '&:before': { display: 'none' } }}>
+                        <AccordionSummary expandIcon={<CaretDownIcon size={20} />}>
+                            <Typography variant="h6" sx={{ fontWeight: 700, color: '#334155' }}>Rehabilitation Program Plan</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            <Box>
+                                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+                                    <Typography variant="body2">Configure rehab program sessions and schedule.</Typography>
+                                    {existingRehabProgramId ? (
+                                        <Typography variant="body2" color="text.secondary">
+                                            Editing existing program
+                                        </Typography>
+                                    ) : (
+                                        <FormControlLabel
+                                            control={
+                                                <Switch
+                                                    checked={createRehabProgram}
+                                                    onChange={(e) => setCreateRehabProgram(e.target.checked)}
+                                                    color="primary"
+                                                    disabled={isView}
+                                                />
+                                            }
+                                            label="Create Rehabilitation Program?"
+                                        />
+                                    )}
+                                </Stack>
+
+                                <Collapse in={createRehabProgram || !!existingRehabProgramId}>
+                                    <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.default' }}>
+                                        <Stack spacing={4}>
+                                            {/* Program Meta */}
+                                            <Box>
+                                                <Typography variant="subtitle2" sx={{ mb: 2 }}>Program Details</Typography>
+                                                <Stack direction="row" spacing={2}>
+                                                    <TextField
+                                                        label="Rehabilitation program's name"
+                                                        fullWidth
+                                                        value={rehabName}
+                                                        onChange={(e) => setRehabName(e.target.value)}
+                                                        placeholder="e.g. Post-op ACL Recovery"
+                                                        slotProps={{ input: { readOnly: isView } }}
+                                                    />
+                                                    <TextField
+                                                        label="Status"
+                                                        select
+                                                        value={rehabStatus}
+                                                        onChange={(e) => setRehabStatus(e.target.value)}
+                                                        sx={{ minWidth: 200 }}
+                                                        slotProps={{ select: { disabled: isView } }}
+                                                    >
+                                                        <MenuItem value="Active">Active</MenuItem>
+                                                        <MenuItem value="Inactive">Inactive</MenuItem>
+                                                    </TextField>
+                                                </Stack>
+
+                                                <Typography variant="subtitle2" sx={{ mt: 3, mb: 2 }}>Program Schedule</Typography>
+                                                <Stack direction="row" spacing={2} alignItems="center">
+                                                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                                                        <DatePicker
+                                                            label="Program Start Date"
+                                                            value={rehabStartDate}
+                                                            onChange={(newValue) => setRehabStartDate(newValue || dayjs())}
+                                                            format="DD/MM/YYYY"
+                                                            slotProps={{ textField: { fullWidth: true } }}
+                                                            disabled={isView}
+                                                        />
+                                                    </LocalizationProvider>
+                                                </Stack>
+
+                                                {rehabRecurrenceType === 'custom' && (
+                                                    <Box sx={{ mt: 3, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                                                        <Typography variant="subtitle2" sx={{ mb: 2 }}>Select Days and Times</Typography>
+                                                        <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
+                                                            {DAYS_OF_WEEK.map((day) => {
+                                                                const isSelected = rehabRecurrenceState.repeatDays.includes(day.value);
+                                                                return (
+                                                                    <Chip
+                                                                        key={day.value}
+                                                                        label={day.label}
+                                                                        color={isSelected ? 'primary' : 'default'}
+                                                                        disabled={isView}
+                                                                        onClick={() => {
+                                                                            if (isView) return;
+                                                                            setRehabRecurrenceState(prev => {
+                                                                                const newDays = isSelected
+                                                                                    ? prev.repeatDays.filter(d => d !== day.value)
+                                                                                    : [...prev.repeatDays, day.value].sort((a, b) => a - b);
+                                                                                
+                                                                                const newTimes = { ...(prev.repeatTimes || {}) };
+                                                                                if (!isSelected && !newTimes[day.value]) {
+                                                                                    newTimes[day.value] = { start: '09:00', end: '10:00' };
+                                                                                }
+                                                                                return { ...prev, repeatDays: newDays, repeatTimes: newTimes };
+                                                                            });
+                                                                        }}
+                                                                        variant={isSelected ? 'filled' : 'outlined'}
+                                                                        sx={{ width: 40, height: 40, borderRadius: '50%' }}
+                                                                    />
+                                                                );
+                                                            })}
+                                                        </Stack>
+                                                        
+                                                        {rehabRecurrenceState.repeatDays.length > 0 && (
+                                                            <Stack spacing={2}>
+                                                                {rehabRecurrenceState.repeatDays.map(dayValue => {
+                                                                    const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayValue];
+                                                                    const times = rehabRecurrenceState.repeatTimes?.[dayValue] || { start: '09:00', end: '10:00' };
+                                                                    return (
+                                                                        <Stack key={dayValue} direction="row" spacing={2} alignItems="center">
+                                                                            <Typography sx={{ width: 100 }}>{dayName}</Typography>
+                                                                            <LocalizationProvider dateAdapter={AdapterDayjs}>
+                                                                                <TimePicker
+                                                                                    label="Start Time"
+                                                                                    value={dayjs(`2000-01-01T${times.start}`)}
+                                                                                    minutesStep={1}
+                                                                                    onChange={(newValue) => {
+                                                                                        if (newValue) {
+                                                                                            setRehabRecurrenceState(prev => ({
+                                                                                                ...prev,
+                                                                                                repeatTimes: {
+                                                                                                    ...prev.repeatTimes,
+                                                                                                    [dayValue]: { ...times, start: newValue.format('HH:mm') }
+                                                                                                }
+                                                                                            }));
+                                                                                        }
+                                                                                    }}
+                                                                                    format="hh:mm A"
+                                                                                    slotProps={{ textField: { size: 'small', sx: { width: 150 } } }}
+                                                                                    disabled={isView}
+                                                                                />
+                                                                                <Typography>to</Typography>
+                                                                                <TimePicker
+                                                                                    label="End Time"
+                                                                                    value={dayjs(`2000-01-01T${times.end}`)}
+                                                                                    minutesStep={1}
+                                                                                    onChange={(newValue) => {
+                                                                                        if (newValue) {
+                                                                                            setRehabRecurrenceState(prev => ({
+                                                                                                ...prev,
+                                                                                                repeatTimes: {
+                                                                                                    ...prev.repeatTimes,
+                                                                                                    [dayValue]: { ...times, end: newValue.format('HH:mm') }
+                                                                                                }
+                                                                                            }));
+                                                                                        }
+                                                                                    }}
+                                                                                    format="hh:mm A"
+                                                                                    slotProps={{ textField: { size: 'small', sx: { width: 150 } } }}
+                                                                                    disabled={isView}
+                                                                                />
+                                                                            </LocalizationProvider>
+                                                                        </Stack>
+                                                                    );
+                                                                })}
+                                                            </Stack>
+                                                        )}
+                                                        {existingRehabProgramId && !isView && (
+                                                            <Box sx={{ mt: 2 }}>
+                                                                <Button
+                                                                    color="error"
+                                                                    variant="outlined"
+                                                                    size="small"
+                                                                    onClick={() => {
+                                                                        setClearScheduling(true);
+                                                                        setRehabRecurrenceState(prev => ({ ...prev, repeatDays: [], repeatTimes: {} }));
+                                                                    }}
+                                                                >
+                                                                    Remove scheduling
+                                                                </Button>
+                                                                {clearScheduling && (
+                                                                    <Typography variant="caption" color="error" sx={{ ml: 2 }}>
+                                                                        Will cancel future appointments upon save.
+                                                                    </Typography>
+                                                                )}
+                                                            </Box>
+                                                        )}
+                                                    </Box>
+                                                )}
+
+                                            </Box>
+
+                                            {/* Sessions & Technologies Split Layout */}
+                                            <Stack direction="row" spacing={3} alignItems="flex-start" sx={{ flexDirection: { xs: 'column', lg: 'row' }}}>
+                                                {/* LEFT: Sessions & Recurrence */}
+                                                <Box sx={{ flex: 2, width: '100%' }}>
+                                                    <Box sx={{ mb: 2 }}>
+                                                        <Typography variant="subtitle2" sx={{ mb: 2 }}>Sessions</Typography>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            Total current sessions: {rehabSessions.reduce((acc, s) => acc + s.count, 0)} ({rehabSessions.length} rows)
+                                                        </Typography>
+                                                    </Box>
+
+                                                    <Stack spacing={2}>
+                                                        <Stack spacing={1}>
+                                                            {rehabSessions.map((session, index) => {
+                                                                const bgColor = 'var(--mui-palette-background-level1)';
+                                                                const startIdx = rehabSessions.slice(0, index).reduce((acc, s) => acc + s.count, 0);
+
+                                                                return (
+                                                                    <Box key={session.id}>
+                                                                        <Stack direction="row" spacing={2} alignItems="center" sx={{ bgcolor: bgColor, p: 1, borderRadius: 1, flexWrap: 'wrap', gap: 1 }}>
+                                                                            <Typography variant="body2" color="text.secondary" sx={{ width: 40, fontWeight: 'bold' }}>#{startIdx}</Typography>
+
+                                                                            <Box sx={{ minWidth: 100 }}>
+                                                                                {simulatedDates[startIdx] ? (
+                                                                                    <Typography variant="caption" color="primary.main" fontWeight="bold">
+                                                                                        {simulatedDates[startIdx].format('DD MMM')}
+                                                                                        {session.count > 1 && simulatedDates[startIdx + session.count - 1] && 
+                                                                                            ` - ${simulatedDates[startIdx + session.count - 1].format('DD MMM')}`}
+                                                                                    </Typography>
+                                                                                ) : <Typography variant="caption" color="text.disabled">Unscheduled</Typography>}
+                                                                            </Box>
+
+                                                                            <TextField
+                                                                                type="number"
+                                                                                size="small"
+                                                                                label="Count"
+                                                                                value={session.count}
+                                                                                onChange={(e) => {
+                                                                                    const val = Math.max(1, parseInt(e.target.value) || 1);
+                                                                                    handleSessionChange(session.id, 'count', val);
+                                                                                }}
+                                                                                sx={{ width: 80 }}
+                                                                                inputProps={{ min: 1, readOnly: isView }}
+                                                                            />
+
+                                                                            <FormControl sx={{ flex: 1, minWidth: 200 }} size="small">
+                                                                                <InputLabel>Services</InputLabel>
+                                                                                <Select
+                                                                                    multiple
+                                                                                    value={session.serviceIds}
+                                                                                    onChange={(e) => {
+                                                                                        const value = e.target.value;
+                                                                                        handleSessionChange(session.id, 'serviceIds', typeof value === 'string' ? value.split(',').map(Number) : value);
+                                                                                    }}
+                                                                                    input={<OutlinedInput label="Services" />}
+                                                                                    disabled={isView}
+                                                                                    renderValue={(selected) => (
+                                                                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                                                                            {selected.map((value) => {
+                                                                                                const s = availableServices.find(srv => srv.id === value);
+                                                                                                return <Chip key={value} label={s?.name || `Service ${value}`} size="small" variant={s?.color ? "filled" : "outlined"} sx={{ height: 20, fontSize: '0.75rem', bgcolor: s?.color || 'background.paper', color: s?.color ? '#fff' : 'inherit', WebkitTextFillColor: s?.color ? '#fff' : 'inherit', borderColor: s?.color || 'divider' }} />;
+                                                                                            })}
+                                                                                        </Box>
+                                                                                    )}
+                                                                                >
+                                                                                    {availableServices.map((service) => (
+                                                                                        <MenuItem key={service.id} value={service.id}>
+                                                                                            <Checkbox checked={session.serviceIds.includes(service.id)} />
+                                                                                            <ListItemText primary={service.name} />
+                                                                                        </MenuItem>
+                                                                                    ))}
+                                                                                </Select>
+                                                                            </FormControl>
+
+                                                                            <IconButton color="error" size="small" onClick={() => handleRemoveSession(session.id)} disabled={rehabSessions.length === 1 || isView}>
+                                                                                <TrashIcon />
+                                                                            </IconButton>
+                                                                        </Stack>
+                                                                    </Box>
+                                                                )
+                                                            })}
+                                                            <Box sx={{ display: 'flex', justifyContent: 'center', my: 1 }}>
+                                                                <IconButton
+                                                                    size="small"
+                                                                    color="primary"
+                                                                    onClick={() => handleCloneSession(rehabSessions.length - 1)}
+                                                                    disabled={isView}
+                                                                    sx={{
+                                                                        border: '1px solid',
+                                                                        borderColor: 'primary.main',
+                                                                        bgcolor: 'primary.main',
+                                                                        color: 'white',
+                                                                        '&:hover': {
+                                                                            bgcolor: 'primary.dark',
+                                                                        },
+                                                                        '&.Mui-disabled': {
+                                                                            bgcolor: 'action.disabledBackground',
+                                                                            borderColor: 'action.disabledBackground',
+                                                                            color: 'action.disabled',
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <PlusIcon size={16} />
+                                                                </IconButton>
+                                                            </Box>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Box>
+
+                                                {/* RIGHT: Selected Techs panel */}
+                                                <Box sx={{ flex: 1, position: 'sticky', top: 0, width: '100%' }}>
+                                                    {uniqueTechnologies.length > 0 && (
+                                                        <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                                                            <Typography variant="subtitle2" sx={{ mb: 2 }}>Technologies involved</Typography>
+                                                            <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+                                                                {uniqueTechnologies.map(tech => (
+                                                                    <Chip key={tech} label={tech} color="secondary" variant="outlined" size="small" />
+                                                                ))}
+                                                            </Stack>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            </Stack>
+                                        </Stack>
+                                    </Box>
+                                </Collapse>
+                            </Box>
+                        </AccordionDetails>
+                    </Accordion>
+                </Stack>
+            </DialogContent>
+            
+            <DialogActions sx={{ p: 2.5, bgcolor: '#f8fafc', borderTop: '1px solid #cbd5e1' }}>
+                <Button onClick={onClose} color="inherit" sx={{ borderRadius: 1.5, textTransform: 'none' }}>
+                    {isView ? 'Close' : 'Cancel'}
+                </Button>
+                {consultation && (currentMode === 'view' || currentMode === 'edit') && (
+                    <Button
+                        onClick={handlePrintDocx}
+                        variant="outlined"
+                        color="primary"
+                        startIcon={<FileTextIcon />}
+                        sx={{ borderRadius: 1.5, textTransform: 'none' }}
+                    >
+                        Generate consultation format
+                    </Button>
+                )}
+                {currentMode === 'view' && (
+                    <Button onClick={() => setCurrentMode('edit')} variant="contained" color="primary" sx={{ borderRadius: 1.5, textTransform: 'none' }}>
+                        Edit
+                    </Button>
+                )}
+                {!isView && (
+                    <Button onClick={handleSave} variant="contained" color="primary" disabled={submitting} sx={{ borderRadius: 1.5, textTransform: 'none' }}>
+                        {currentMode === 'edit' ? 'Update Consultation' : 'Save Consultation'}
+                    </Button>
+                )}
+            </DialogActions>
+
+            {/* ADD CONTACT DIALOG */}
+            <AddContactDialog
+                open={isAddContactOpen}
+                onClose={() => setIsAddContactOpen(false)}
+                onSuccess={() => {
+                    setIsAddContactOpen(false);
+                    loadContacts();
+                }}
+            />
+
+            {/* PATIENT CLINICAL HISTORY DIALOG */}
+            <ClinicalHistoryDialog
+                open={isClinicalHistoryOpen}
+                onClose={() => setIsClinicalHistoryOpen(false)}
+                patient={patientRecord}
+            />
+
+            {/* INDICATIONS DIALOG (Auxiliary Dialog) */}
+            <IndicationsDialog
+                open={indicationsDialogOpen}
+                onClose={() => {
+                    setIndicationsDialogOpen(false);
+                    setEditingIndication(null);
+                }}
+                onSave={handleSaveIndication}
+                initialData={editingIndication}
+                availableServices={availableServices}
+            />
+
+            {/* ASSESSMENT DIALOG (Auxiliary Dialog) */}
+            <AssessmentDialog
+                open={assessmentDialogOpen}
+                onClose={() => {
+                    setAssessmentDialogOpen(false);
+                    setEditingAssessment(null);
+                }}
+                onSave={handleSaveAssessmentSub}
+                initialData={editingAssessment}
+                staffMembers={staffMembers}
+            />
+        </Dialog>
+    );
+}
+
+// ==========================================
+// AUXILIARY DIALOG: INDICATIONS DIALOG
+// ==========================================
+interface IndicationsDialogProps {
+    open: boolean;
+    onClose: () => void;
+    onSave: (data: Omit<Indication, 'id' | 'consultationId'>) => void;
+    initialData: Indication | null;
+    availableServices: ServiceRecord[];
+}
+
+function IndicationsDialog({ open, onClose, onSave, initialData, availableServices }: IndicationsDialogProps) {
+    const [tx0, setTx0] = React.useState<number[]>([]);
+    const [tx, setTx] = React.useState<number[]>([]);
+    const [periodicity, setPeriodicity] = React.useState('3 x week');
+    const [nextAssessmentAfter, setNextAssessmentAfter] = React.useState<number>(5);
+    const [discharge, setDischarge] = React.useState(false);
+    const [observations, setObservations] = React.useState('');
+
+    const periodicityOptions = [
+        '7 x week', '6 x week', '5 x week', '4 x week', '3 x week', '2 x week', '1 x week',
+        '1 day', '2 days', '3 days', 'waiting for studies', '1 fortnightly', 'daily',
+        'free appointment', '1 monthly'
+    ];
+
+    React.useEffect(() => {
+        if (open) {
+            if (initialData) {
+                setTx0(initialData.tx0ServiceIds ? initialData.tx0ServiceIds.split(',').map(Number) : []);
+                setTx(initialData.txServiceIds ? initialData.txServiceIds.split(',').map(Number) : []);
+                setPeriodicity(initialData.periodicity || '3 x week');
+                setNextAssessmentAfter(initialData.nextAssessmentAfterSessions ?? 5);
+                setDischarge(!!initialData.discharge);
+                setObservations(initialData.observations || '');
+            } else {
+                setTx0([]);
+                setTx([]);
+                setPeriodicity('3 x week');
+                setNextAssessmentAfter(5);
+                setDischarge(false);
+                setObservations('');
+            }
+        }
+    }, [open, initialData]);
+
+    const handleSave = () => {
+        onSave({
+            tx0ServiceIds: tx0.join(','),
+            txServiceIds: tx.join(','),
+            periodicity,
+            nextAssessmentAfterSessions: Number(nextAssessmentAfter) || 0,
+            discharge,
+            observations
+        });
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+            <DialogTitle sx={{ fontWeight: 700 }}>
+                {initialData ? 'Edit Indications' : 'Indications'}
+            </DialogTitle>
+            <DialogContent dividers>
+                <Stack spacing={2.5}>
+                    <FormControl fullWidth size="small">
+                        <InputLabel>TX 0</InputLabel>
+                        <Select
+                            multiple
+                            value={tx0}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setTx0(typeof val === 'string' ? val.split(',').map(Number) : val);
+                            }}
+                            input={<OutlinedInput label="TX 0" />}
+                            renderValue={(selected) => (
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                    {selected.map((value) => {
+                                        const s = availableServices.find(srv => srv.id === value);
+                                        return <Chip key={value} label={s?.name || `Service ${value}`} size="small" />;
+                                    })}
+                                </Box>
+                            )}
+                        >
+                            {availableServices.map((service) => (
+                                <MenuItem key={service.id} value={service.id}>
+                                    <Checkbox checked={tx0.includes(service.id)} />
+                                    <ListItemText primary={service.name} />
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
+                    <FormControl fullWidth size="small">
+                        <InputLabel>TX</InputLabel>
+                        <Select
+                            multiple
+                            value={tx}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setTx(typeof val === 'string' ? val.split(',').map(Number) : val);
+                            }}
+                            input={<OutlinedInput label="TX" />}
+                            renderValue={(selected) => (
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                    {selected.map((value) => {
+                                        const s = availableServices.find(srv => srv.id === value);
+                                        return <Chip key={value} label={s?.name || `Service ${value}`} size="small" />;
+                                    })}
+                                </Box>
+                            )}
+                        >
+                            {availableServices.map((service) => (
+                                <MenuItem key={service.id} value={service.id}>
+                                    <Checkbox checked={tx.includes(service.id)} />
+                                    <ListItemText primary={service.name} />
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
+                    <TextField
+                        select
+                        size="small"
+                        label="Periodicity"
+                        value={periodicity}
+                        onChange={(e) => setPeriodicity(e.target.value)}
+                        fullWidth
+                    >
+                        {periodicityOptions.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                    </TextField>
+
+                    <TextField
+                        type="number"
+                        size="small"
+                        label="Next assessment after sessions"
+                        value={nextAssessmentAfter}
+                        onChange={(e) => setNextAssessmentAfter(Math.max(0, parseInt(e.target.value) || 0))}
+                        fullWidth
+                    />
+
+                    <FormControlLabel
+                        control={
+                            <Checkbox 
+                                checked={discharge} 
+                                onChange={(e) => setDischarge(e.target.checked)} 
+                                color="primary"
+                            />
+                        }
+                        label="Discharge"
+                    />
+
+                    <TextField
+                        label="Indications observations"
+                        value={observations}
+                        onChange={(e) => setObservations(e.target.value)}
+                        multiline
+                        rows={4}
+                        fullWidth
+                    />
+                </Stack>
+            </DialogContent>
+            <DialogActions sx={{ p: 2 }}>
+                <Button onClick={onClose} color="inherit" sx={{ textTransform: 'none', borderRadius: 1.5 }}>
+                    Close
+                </Button>
+                <Button onClick={handleSave} variant="contained" color="primary" sx={{ textTransform: 'none', borderRadius: 1.5 }}>
+                    Save
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
+// ==========================================
+// AUXILIARY DIALOG: NEW ASSESSMENT DIALOG
+// ==========================================
+interface AssessmentDialogProps {
+    open: boolean;
+    onClose: () => void;
+    onSave: (data: Omit<AssessmentInput, 'id'>) => void;
+    initialData: AssessmentInput | null;
+    staffMembers: User[];
+}
+
+function AssessmentDialog({ open, onClose, onSave, initialData, staffMembers }: AssessmentDialogProps) {
+    const [area, setArea] = React.useState('Left');
+    const [pain, setPain] = React.useState<number | ''>(1);
+    const [painObservations, setPainObservations] = React.useState('');
+    const [edema, setEdema] = React.useState('');
+    const [romS, setRomS] = React.useState('');
+    const [march, setMarch] = React.useState('Complete phases and variants');
+    const [temperature, setTemperature] = React.useState('Without alteration');
+    const [temperatureColoration, setTemperatureColoration] = React.useState('');
+    const [muscleTone, setMuscleTone] = React.useState('Normal');
+    const [muscularForce, setMuscularForce] = React.useState('4: GOOD');
+    const [trophism, setTrophism] = React.useState('NORMAL MUSCLE TROPHISM');
+    const [trophismObservations, setTrophismObservations] = React.useState('');
+    const [sensitivity, setSensitivity] = React.useState('NORMAL');
+    const [recovery, setRecovery] = React.useState<number | ''>(0);
+    const [observations, setObservations] = React.useState('');
+    const [attendantId, setAttendantId] = React.useState<number | ''>('');
+
+    React.useEffect(() => {
+        if (open) {
+            if (initialData) {
+                setArea(initialData.area || 'Left');
+                setPain(initialData.pain !== '' ? Number(initialData.pain) : '');
+                setPainObservations(initialData.painObservations || '');
+                setEdema(initialData.edema || '');
+                setRomS(initialData.romS || '');
+                setMarch(initialData.march || 'Complete phases and variants');
+                setTemperature(initialData.temperature || 'Without alteration');
+                setTemperatureColoration(initialData.temperatureColoration || '');
+                setMuscleTone(initialData.muscleTone || 'Normal');
+                setMuscularForce(initialData.muscularForce || '4: GOOD');
+                setTrophism(initialData.trophism || 'NORMAL MUSCLE TROPHISM');
+                setTrophismObservations(initialData.trophismObservations || '');
+                setSensitivity(initialData.sensitivity || 'NORMAL');
+                setRecovery(initialData.recovery !== '' ? Number(initialData.recovery) : 0);
+                setObservations(initialData.observations || '');
+                setAttendantId(initialData.userId || '');
+            } else {
+                setArea('Left');
+                setPain(1);
+                setPainObservations('');
+                setEdema('');
+                setRomS('');
+                setMarch('Complete phases and variants');
+                setTemperature('Without alteration');
+                setTemperatureColoration('');
+                setMuscleTone('Normal');
+                setMuscularForce('4: GOOD');
+                setTrophism('NORMAL MUSCLE TROPHISM');
+                setTrophismObservations('');
+                setSensitivity('NORMAL');
+                setRecovery(0);
+                setObservations('');
+                setAttendantId('');
+            }
+        }
+    }, [open, initialData]);
+
+    const handleSave = () => {
+        onSave({
+            area,
+            pain,
+            painObservations,
+            edema,
+            romS,
+            march,
+            temperature,
+            temperatureColoration,
+            muscleTone,
+            muscularForce,
+            trophism,
+            trophismObservations,
+            sensitivity,
+            recovery,
+            observations,
+            userId: attendantId === '' ? undefined : Number(attendantId)
+        });
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+            <DialogTitle sx={{ fontWeight: 700 }}>
+                {initialData ? 'Edit Assessment' : 'New Assessment'}
+            </DialogTitle>
+            <DialogContent dividers>
+                <Stack spacing={2.5}>
+                    <TextField
+                        select
+                        size="small"
+                        label="Area"
+                        value={area}
+                        onChange={(e) => setArea(e.target.value)}
+                        fullWidth
+                    >
+                        {ASSESSMENT_AREAS.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                    </TextField>
+
+                    <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, color: 'text.secondary' }}>Pain (1-10):</Typography>
+                        <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+                                const isSelected = pain === num;
+                                return (
+                                    <IconButton
+                                        key={num}
+                                        onClick={() => setPain(num)}
+                                        sx={{
+                                            width: 36,
+                                            height: 36,
+                                            fontSize: '0.875rem',
+                                            bgcolor: isSelected ? 'primary.main' : '#f1f5f9',
+                                            color: isSelected ? 'primary.contrastText' : 'text.primary',
+                                            border: '1px solid',
+                                            borderColor: isSelected ? 'primary.main' : '#cbd5e1',
+                                            '&:hover': {
+                                                bgcolor: isSelected ? 'primary.dark' : '#e2e8f0',
+                                            },
+                                        }}
+                                    >
+                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{num}</Typography>
+                                    </IconButton>
+                                );
+                            })}
+                        </Stack>
+                    </Box>
+
+                    <TextField
+                        label="Additional observations related to pain / Pain observations"
+                        value={painObservations}
+                        onChange={(e) => setPainObservations(e.target.value)}
+                        multiline
+                        rows={3}
+                        fullWidth
+                    />
+
+                    <TextField
+                        size="small"
+                        label="Edema"
+                        value={edema}
+                        onChange={(e) => setEdema(e.target.value)}
+                        fullWidth
+                    />
+
+                    <TextField
+                        size="small"
+                        label="ROM S"
+                        value={romS}
+                        onChange={(e) => setRomS(e.target.value)}
+                        fullWidth
+                    />
+
+                    <TextField
+                        select
+                        size="small"
+                        label="March"
+                        value={march}
+                        onChange={(e) => setMarch(e.target.value)}
+                        fullWidth
+                    >
+                        {ASSESSMENT_MARCH.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                    </TextField>
+
+                    <TextField
+                        select
+                        size="small"
+                        label="Temperature"
+                        value={temperature}
+                        onChange={(e) => setTemperature(e.target.value)}
+                        fullWidth
+                    >
+                        {ASSESSMENT_TEMPERATURES.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                    </TextField>
+
+                    <TextField
+                        size="small"
+                        label="Coloration"
+                        value={temperatureColoration}
+                        onChange={(e) => setTemperatureColoration(e.target.value)}
+                        fullWidth
+                    />
+
+                    <TextField
+                        select
+                        size="small"
+                        label="Muscle tone"
+                        value={muscleTone}
+                        onChange={(e) => setMuscleTone(e.target.value)}
+                        fullWidth
+                    >
+                        {ASSESSMENT_MUSCLE_TONES.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                    </TextField>
+
+                    <TextField
+                        select
+                        size="small"
+                        label="Muscular force"
+                        value={muscularForce}
+                        onChange={(e) => setMuscularForce(e.target.value)}
+                        fullWidth
+                    >
+                        {ASSESSMENT_MUSCULAR_FORCES.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                    </TextField>
+
+                    <TextField
+                        select
+                        size="small"
+                        label="Trophism"
+                        value={trophism}
+                        onChange={(e) => setTrophism(e.target.value)}
+                        fullWidth
+                    >
+                        {TROPHISM_OPTIONS.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                    </TextField>
+
+                    <TextField
+                        label="Additional observations related to trophism / Trophism observations"
+                        value={trophismObservations}
+                        onChange={(e) => setTrophismObservations(e.target.value)}
+                        multiline
+                        rows={3}
+                        fullWidth
+                    />
+
+                    <TextField
+                        select
+                        size="small"
+                        label="Sensitivity & Reflexes"
+                        value={sensitivity}
+                        onChange={(e) => setSensitivity(e.target.value)}
+                        fullWidth
+                    >
+                        {ASSESSMENT_SENSITIVITIES.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                    </TextField>
+
+                    <TextField
+                        type="number"
+                        size="small"
+                        label="Recovery (0-100%)"
+                        value={recovery}
+                        onChange={(e) => setRecovery(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                        slotProps={{ htmlInput: { min: 0, max: 100 } }}
+                        fullWidth
+                    />
+
+                    <TextField
+                        label="Additional observations"
+                        value={observations}
+                        onChange={(e) => setObservations(e.target.value)}
+                        multiline
+                        rows={3}
+                        fullWidth
+                    />
+
+                    <Autocomplete
+                        options={staffMembers}
+                        getOptionLabel={(option) => option.fullName || ''}
+                        getOptionKey={(option) => option.id}
+                        isOptionEqualToValue={(option, value) => option.id === value.id}
+                        value={staffMembers.find(s => s.id === attendantId) || null}
+                        onChange={(event, newValue) => {
+                            setAttendantId(newValue ? newValue.id : '');
+                        }}
+                        renderInput={(params) => <TextField {...params} label="Person In Charge (Attendant)" fullWidth size="small" />}
+                    />
+                </Stack>
+            </DialogContent>
+            <DialogActions sx={{ p: 2 }}>
+                <Button onClick={onClose} color="inherit" sx={{ textTransform: 'none', borderRadius: 1.5 }}>
+                    Close
+                </Button>
+                <Button onClick={handleSave} variant="contained" color="primary" sx={{ textTransform: 'none', borderRadius: 1.5 }}>
+                    Save
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
