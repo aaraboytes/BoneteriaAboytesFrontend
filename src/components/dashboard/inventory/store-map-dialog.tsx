@@ -36,6 +36,10 @@ import {
   CheckCircle as CheckIcon,
   Funnel as FilterIcon,
   Package as PackageIcon,
+  Plus as PlusIcon,
+  Minus as MinusIcon,
+  ArrowsOut as ResetIcon,
+  Hand as HandIcon,
 } from '@phosphor-icons/react';
 import apiClient from '@/lib/api-client';
 import { InventoryItem } from './inventory-table';
@@ -131,6 +135,18 @@ export function StoreMapDialog({
   const [page, setPage] = React.useState<number>(0);
   const rowsPerPage = 25;
 
+  // Zoom & Pan state
+  const [zoom, setZoom] = React.useState<number>(1);
+  const [pan, setPan] = React.useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = React.useState<boolean>(false);
+  const [panStart, setPanStart] = React.useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Reset zoom & pan when active store changes or dialog opens
+  const handleResetView = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
   // Synchronize store ID immediately when selectedStoreId changes
   React.useEffect(() => {
     if (selectedStoreId) {
@@ -138,6 +154,7 @@ export function StoreMapDialog({
     } else if (stores.length > 0) {
       setActiveStoreId(stores[0].id);
     }
+    handleResetView();
   }, [selectedStoreId, stores]);
 
   // Reset pagination when filters change
@@ -219,6 +236,38 @@ export function StoreMapDialog({
     return sidebarItems.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
   }, [sidebarItems, page]);
 
+  // Mouse wheel zoom handler
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+    setZoom((prev) => Math.min(Math.max(prev * zoomFactor, 0.4), 3.0));
+  };
+
+  // Middle-click / Drag pan handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning) {
+      e.preventDefault();
+      setPan({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y,
+      });
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (e.button === 1 || isPanning) {
+      setIsPanning(false);
+    }
+  };
+
   const activeStoreObj = stores.find((s) => s.id === Number(activeStoreId));
   const activeStoreName = activeStoreObj ? activeStoreObj.name : 'Sucursal';
 
@@ -253,7 +302,7 @@ export function StoreMapDialog({
                 Plano Interactivo de Ubicaciones - {activeStoreName}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Pasa el cursor sobre un producto para resaltar su ubicación en el mapa, o sobre una zona del plano para ver sus productos.
+                Usa la rueda del mouse para Zoom, Clic Central para arrastrar el mapa, o pasa el cursor sobre productos/zonas.
               </Typography>
             </Box>
           </Stack>
@@ -302,32 +351,110 @@ export function StoreMapDialog({
                   </Typography>
                 </Stack>
 
-                {selectedZoneFilter && (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  {selectedZoneFilter && (
+                    <Chip
+                      label={`Filtro Activo: ${selectedZoneFilter}`}
+                      color="primary"
+                      size="small"
+                      onDelete={() => setSelectedZoneFilter(null)}
+                      sx={{ fontWeight: 700 }}
+                    />
+                  )}
                   <Chip
-                    label={`Filtro Activo: ${selectedZoneFilter}`}
-                    color="primary"
+                    icon={<HandIcon size={14} weight="bold" />}
+                    label="Clic Central: Arrastrar | Rueda: Zoom"
                     size="small"
-                    onDelete={() => setSelectedZoneFilter(null)}
-                    sx={{ fontWeight: 700 }}
+                    variant="outlined"
+                    sx={{ fontSize: 11, fontWeight: 600 }}
                   />
-                )}
+                </Stack>
               </Stack>
 
+              {/* Map Canvas Viewport with Zoom & Middle Click Drag support */}
               <Box
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onAuxClick={(e) => {
+                  if (e.button === 1) e.preventDefault();
+                }}
                 sx={{
                   position: 'relative',
                   width: '100%',
                   height: 520,
-                  overflow: 'auto',
+                  overflow: 'hidden',
                   border: '2px dashed #e2e8f0',
                   borderRadius: 2.5,
                   bgcolor: '#fafafa',
                   p: 2,
                   display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'center',
+                  cursor: isPanning ? 'grabbing' : 'default',
+                  userSelect: 'none',
                 }}
               >
-                <Box sx={{ position: 'relative', width: 680, height: 520, flexShrink: 0 }}>
+                {/* Floating Zoom & Reset Control Bar */}
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    position: 'absolute',
+                    top: 14,
+                    right: 14,
+                    zIndex: 20,
+                    borderRadius: 2,
+                    p: 0.5,
+                    bgcolor: 'rgba(255,255,255,0.92)',
+                    backdropFilter: 'blur(6px)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                  }}
+                >
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <Tooltip title="Acercar (Zoom In)">
+                      <IconButton
+                        size="small"
+                        onClick={() => setZoom((z) => Math.min(z * 1.2, 3.0))}
+                        sx={{ borderRadius: 1.5 }}
+                      >
+                        <PlusIcon size={18} weight="bold" />
+                      </IconButton>
+                    </Tooltip>
+                    <Typography variant="caption" fontWeight={700} sx={{ minWidth: 42, textAlign: 'center' }}>
+                      {Math.round(zoom * 100)}%
+                    </Typography>
+                    <Tooltip title="Alejar (Zoom Out)">
+                      <IconButton
+                        size="small"
+                        onClick={() => setZoom((z) => Math.max(z * 0.8, 0.4))}
+                        sx={{ borderRadius: 1.5 }}
+                      >
+                        <MinusIcon size={18} weight="bold" />
+                      </IconButton>
+                    </Tooltip>
+                    <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                    <Tooltip title="Restablecer Vista (100% / Centrar)">
+                      <IconButton size="small" onClick={handleResetView} sx={{ borderRadius: 1.5 }}>
+                        <ResetIcon size={18} weight="bold" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </Paper>
+
+                {/* Inner Canvas Floor Plan with Transform Matrix */}
+                <Box
+                  sx={{
+                    position: 'relative',
+                    width: 680,
+                    height: 520,
+                    flexShrink: 0,
+                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                    transformOrigin: 'center center',
+                    transition: isPanning ? 'none' : 'transform 0.12s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                >
                   {mapObjects.map((obj) => {
                     const count = productsPerZone[obj.name] || 0;
                     const isHoveredProductZone =
