@@ -6,17 +6,24 @@ import {
   Card,
   Chip,
   CircularProgress,
+  Divider,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import {
   CheckCircle as CheckIcon,
   MapPin as PinIcon,
+  Plus as PlusIcon,
+  Minus as MinusIcon,
+  ArrowsOut as ResetIcon,
+  Hand as HandIcon,
 } from '@phosphor-icons/react';
 import apiClient from '@/lib/api-client';
 
@@ -40,6 +47,66 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
   const [selectedStoreId, setSelectedStoreId] = React.useState<number | ''>('');
   const [loading, setLoading] = React.useState<boolean>(true);
   const [mapObjects, setMapObjects] = React.useState<MapObjectItem[]>([]);
+
+  // Zoom & Pan state
+  const [zoom, setZoom] = React.useState<number>(1);
+  const [pan, setPan] = React.useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = React.useState<boolean>(false);
+  const [panStart, setPanStart] = React.useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+
+  const handleResetView = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  // Reset view when selected store changes
+  React.useEffect(() => {
+    handleResetView();
+  }, [selectedStoreId]);
+
+  // Non-passive wheel listener for smooth zooming inside container
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+      setZoom((prev) => Math.min(Math.max(prev * zoomFactor, 0.4), 3.0));
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, []);
+
+  // Middle-click / Drag pan handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning) {
+      e.preventDefault();
+      setPan({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y,
+      });
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (e.button === 1 || isPanning) {
+      setIsPanning(false);
+    }
+  };
 
   // 1. Fetch Stores list
   React.useEffect(() => {
@@ -209,6 +276,14 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
           </Box>
         ) : (
           <Box
+            ref={containerRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onAuxClick={(e) => {
+              if (e.button === 1) e.preventDefault();
+            }}
             sx={{
               position: 'relative',
               width: '100%',
@@ -216,18 +291,96 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
               bgcolor: '#ffffff',
               borderRadius: 3,
               border: '2px dashed #cbd5e1',
-              overflowX: 'auto',
+              overflow: 'hidden',
               p: 2,
               display: 'flex',
+              alignItems: 'center',
               justifyContent: 'center',
+              cursor: isPanning ? 'grabbing' : 'default',
+              userSelect: 'none',
             }}
           >
+            {/* Navigation Hint Badge */}
+            <Paper
+              variant="outlined"
+              sx={{
+                position: 'absolute',
+                top: 14,
+                left: 14,
+                zIndex: 20,
+                borderRadius: 2,
+                px: 1.5,
+                py: 0.6,
+                bgcolor: 'rgba(255,255,255,0.92)',
+                backdropFilter: 'blur(6px)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                display: { xs: 'none', sm: 'flex' },
+                alignItems: 'center',
+                gap: 1,
+              }}
+            >
+              <HandIcon size={16} color="#64748b" weight="bold" />
+              <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                Wheel: <strong>Zoom</strong> • Clic Central: <strong>Mover plano</strong>
+              </Typography>
+            </Paper>
+
+            {/* Floating Zoom & Reset Control Bar */}
+            <Paper
+              variant="outlined"
+              sx={{
+                position: 'absolute',
+                top: 14,
+                right: 14,
+                zIndex: 20,
+                borderRadius: 2,
+                p: 0.5,
+                bgcolor: 'rgba(255,255,255,0.92)',
+                backdropFilter: 'blur(6px)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+              }}
+            >
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Tooltip title="Acercar (Zoom In)">
+                  <IconButton
+                    size="small"
+                    onClick={() => setZoom((z) => Math.min(z * 1.2, 3.0))}
+                    sx={{ borderRadius: 1.5 }}
+                  >
+                    <PlusIcon size={18} weight="bold" />
+                  </IconButton>
+                </Tooltip>
+                <Typography variant="caption" fontWeight={700} sx={{ minWidth: 42, textAlign: 'center' }}>
+                  {Math.round(zoom * 100)}%
+                </Typography>
+                <Tooltip title="Alejar (Zoom Out)">
+                  <IconButton
+                    size="small"
+                    onClick={() => setZoom((z) => Math.max(z * 0.8, 0.4))}
+                    sx={{ borderRadius: 1.5 }}
+                  >
+                    <MinusIcon size={18} weight="bold" />
+                  </IconButton>
+                </Tooltip>
+                <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                <Tooltip title="Restablecer Vista (100% / Centrar)">
+                  <IconButton size="small" onClick={handleResetView} sx={{ borderRadius: 1.5 }}>
+                    <ResetIcon size={18} weight="bold" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </Paper>
+
+            {/* Inner Canvas Floor Plan with Transform Matrix */}
             <Box
               sx={{
                 position: 'relative',
                 width: 680,
                 height: 570,
                 flexShrink: 0,
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: 'center center',
+                transition: isPanning ? 'none' : 'transform 0.12s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
               {mapObjects.map((obj) => {
