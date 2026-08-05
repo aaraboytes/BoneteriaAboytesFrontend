@@ -18,10 +18,14 @@ import {
     IconButton,
     FormControlLabel,
     Checkbox,
+    Autocomplete,
+    Chip,
 } from '@mui/material';
 import { Camera as CameraIcon } from '@phosphor-icons/react/dist/ssr/Camera';
 import { X as XIcon } from '@phosphor-icons/react/dist/ssr/X';
+import apiClient from '@/lib/api-client';
 import { Product } from './products-table';
+import { MapLocationPicker } from './map-location-picker';
 
 interface ProductDialogProps {
     open: boolean;
@@ -38,11 +42,59 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
         quantity: undefined,
         imageBase64: '',
         isDefault: false,
+        mapLocation: [],
     });
+
+    const [availableLocations, setAvailableLocations] = React.useState<string[]>([]);
+
+    React.useEffect(() => {
+        if (!open) return;
+
+        const fetchStoreMapLocations = async () => {
+            try {
+                const res = await apiClient.get('/Stores');
+                const stores = res.data || [];
+                const locationSet = new Set<string>();
+
+                stores.forEach((store: any) => {
+                    if (store.mapData) {
+                        try {
+                            const parsed = JSON.parse(store.mapData);
+                            const objects = parsed.objects || [];
+                            objects.forEach((obj: any) => {
+                                if (obj.customName) {
+                                    locationSet.add(obj.customName);
+                                }
+                                if (obj.text && typeof obj.text === 'string' && obj.text.trim().length > 0) {
+                                    locationSet.add(obj.text.trim());
+                                }
+                            });
+                        } catch (e) {
+                            console.error('Failed to parse mapData JSON for store', store.id, e);
+                        }
+                    }
+                });
+
+                if (locationSet.size === 0) {
+                    ['CAJA', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5', 'C1', 'C2', 'C3', 'C4', 'C5'].forEach((l) => locationSet.add(l));
+                }
+
+                setAvailableLocations(Array.from(locationSet));
+            } catch (err) {
+                console.error('Failed to load store map locations', err);
+                setAvailableLocations(['CAJA', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5', 'C1', 'C2', 'C3', 'C4', 'C5']);
+            }
+        };
+
+        fetchStoreMapLocations();
+    }, [open]);
 
     React.useEffect(() => {
         if (product) {
-            setFormData(product);
+            setFormData({
+                ...product,
+                mapLocation: product.mapLocation && Array.isArray(product.mapLocation) ? product.mapLocation : [],
+            });
         } else {
             setFormData({
                 name: '',
@@ -51,6 +103,7 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
                 quantity: undefined,
                 imageBase64: '',
                 isDefault: false,
+                mapLocation: [],
             });
         }
     }, [product, open]);
@@ -166,6 +219,11 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
                             />
                         </FormControl>
                     </Stack>
+
+                    <MapLocationPicker
+                        selectedLocations={formData.mapLocation || []}
+                        onChange={(locations) => setFormData((prev) => ({ ...prev, mapLocation: locations }))}
+                    />
 
                     <FormControlLabel
                         control={

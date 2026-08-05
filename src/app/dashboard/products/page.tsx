@@ -58,10 +58,14 @@ export default function ProductsPage(): React.JSX.Element {
 
     const handleSave = async (productData: Partial<Product>) => {
         try {
+            const payload = {
+                ...productData,
+                description: productData.name || productData.description || 'Producto',
+            };
             if (selectedProduct) {
-                await apiClient.put(`/Products/${selectedProduct.id}`, productData);
+                await apiClient.put(`/Products/${selectedProduct.id}`, payload);
             } else {
-                await apiClient.post('/Products', productData);
+                await apiClient.post('/Products', payload);
             }
             setDialogOpen(false);
             fetchProducts();

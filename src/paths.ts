@@ -6,6 +6,7 @@ export const paths = {
     sales: '/dashboard/sales',
     inventory: '/dashboard/inventory',
     stores: '/dashboard/stores',
+    storeMap: (id: string | number) => `/dashboard/stores/${id}/map`,
     products: '/dashboard/products',
     services: '/dashboard/services',
     customers: '/dashboard/customers',

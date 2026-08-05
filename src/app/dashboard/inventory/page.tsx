@@ -146,6 +146,7 @@ export default function InventoryPage(): React.JSX.Element {
         description: updatedItem.description,
         price: updatedItem.price,
         cost: updatedItem.cost,
+        mapLocation: updatedItem.mapLocation,
       });
     } catch (err) {
       console.error('Failed to update product details on backend', err);

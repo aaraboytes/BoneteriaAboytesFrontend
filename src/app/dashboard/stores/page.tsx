@@ -8,6 +8,7 @@ import {
   Card,
   CardActions,
   CardContent,
+  Chip,
   CircularProgress,
   Container,
   Dialog,
@@ -28,7 +29,8 @@ import {
   ArrowsClockwise as RefreshIcon,
   MapPin as LocationIcon,
   Phone as PhoneIcon,
-  Package as PackageIcon
+  Package as PackageIcon,
+  MapTrifold as MapIcon,
 } from '@phosphor-icons/react';
 import apiClient from '@/lib/api-client';
 
@@ -39,6 +41,7 @@ export interface StoreItem {
   address: string;
   phone: string;
   isActive: boolean;
+  mapData?: string | null;
 }
 
 export default function StoresPage(): React.JSX.Element {
@@ -117,6 +120,27 @@ export default function StoresPage(): React.JSX.Element {
       fetchStores();
     } catch (err) {
       console.error('Failed to delete store', err);
+    }
+  };
+
+  const handleOpenMap = (storeId: number) => {
+    window.open(`/dashboard/stores/${storeId}/map`, '_blank');
+  };
+
+  const handleDeleteMap = async (store: StoreItem) => {
+    if (!window.confirm(`¿Estás seguro de eliminar el mapa de la sucursal "${store.name}"?`)) return;
+    try {
+      await apiClient.put(`/Stores/${store.id}`, {
+        name: store.name,
+        code: store.code,
+        address: store.address,
+        phone: store.phone,
+        mapData: '',
+      });
+      fetchStores();
+    } catch (err) {
+      console.error('Failed to delete store map', err);
+      alert('Error al eliminar el mapa.');
     }
   };
 
@@ -219,6 +243,65 @@ export default function StoresPage(): React.JSX.Element {
                             </Stack>
                           )}
                         </Stack>
+
+                        {/* Store Map Section */}
+                        <Box
+                          sx={{
+                            mt: 1,
+                            pt: 2,
+                            borderTop: '1px dashed var(--mui-palette-divider)',
+                          }}
+                        >
+                          {store.mapData ? (
+                            <Stack spacing={1.5}>
+                              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                                <Chip
+                                  icon={<MapIcon size={16} weight="bold" />}
+                                  label="Mapa Configurado"
+                                  color="success"
+                                  size="small"
+                                  sx={{ fontWeight: 600, borderRadius: 1.5 }}
+                                />
+                              </Stack>
+                              <Stack direction="row" spacing={1}>
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  startIcon={<MapIcon size={18} />}
+                                  onClick={() => handleOpenMap(store.id)}
+                                  fullWidth
+                                  sx={{ borderRadius: 2 }}
+                                >
+                                  Ver / Editar Mapa
+                                </Button>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  title="Eliminar Mapa"
+                                  onClick={() => handleDeleteMap(store)}
+                                >
+                                  <TrashIcon size={18} />
+                                </IconButton>
+                              </Stack>
+                            </Stack>
+                          ) : (
+                            <Stack spacing={1.5} alignItems="flex-start">
+                              <Typography variant="caption" color="text.secondary" fontWeight={500}>
+                                Sin mapa asignado (vacío)
+                              </Typography>
+                              <Button
+                                variant="contained"
+                                color="secondary"
+                                size="small"
+                                startIcon={<MapIcon size={18} />}
+                                onClick={() => handleOpenMap(store.id)}
+                                sx={{ borderRadius: 2 }}
+                              >
+                                Crear mapa
+                              </Button>
+                            </Stack>
+                          )}
+                        </Box>
                       </Stack>
                     </CardContent>
 

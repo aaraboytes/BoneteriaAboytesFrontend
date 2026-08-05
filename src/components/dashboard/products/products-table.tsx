@@ -26,6 +26,7 @@ export interface Product {
     quantity?: number;
     imageBase64?: string;
     isDefault: boolean;
+    mapLocation?: string[];
 }
 
 interface ProductsTableProps {
@@ -45,6 +46,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                             <TableCell>Description</TableCell>
                             <TableCell>Price</TableCell>
                             <TableCell>Stock</TableCell>
+                            <TableCell>Ubicación en Mapa</TableCell>
                             <TableCell align="right">Actions</TableCell>
                         </TableRow>
                     </TableHead>
@@ -52,6 +54,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                         {products.map((product) => {
                             const displayName = product.name || product.description || 'Producto';
                             const firstLetter = displayName.length > 0 ? displayName.charAt(0).toUpperCase() : 'P';
+                            const locations = product.mapLocation && Array.isArray(product.mapLocation) ? product.mapLocation : [];
 
                             return (
                                 <TableRow hover key={product.id}>
@@ -94,6 +97,17 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                                         <Typography variant="caption" color="text.disabled">N/A</Typography>
                                     )}
                                 </TableCell>
+                                <TableCell>
+                                    {locations.length > 0 ? (
+                                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                                            {locations.map((loc) => (
+                                                <Chip key={loc} label={loc} size="small" color="info" variant="outlined" sx={{ fontSize: 11, height: 22 }} />
+                                            ))}
+                                        </Stack>
+                                    ) : (
+                                        <Typography variant="caption" color="text.disabled">Sin asignar</Typography>
+                                    )}
+                                </TableCell>
                                 <TableCell align="right">
                                     <Stack direction="row" spacing={1} justifyContent="flex-end">
                                         <IconButton size="small" onClick={() => onEdit(product)}>
@@ -109,7 +123,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                         })}
                         {products.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                                <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                                     <Typography variant="body2" color="text.secondary">No products found. Add your first product!</Typography>
                                 </TableCell>
                             </TableRow>

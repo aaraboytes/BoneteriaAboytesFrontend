@@ -38,6 +38,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import apiClient from '@/lib/api-client';
+import { MapLocationPicker } from '../products/map-location-picker';
 import {
   MagnifyingGlass as SearchIcon,
   Funnel as FilterIcon,
@@ -68,6 +70,7 @@ export interface InventoryItem {
   cost: number;
   stockQuantity: number;
   barcodes?: string[];
+  mapLocation?: string[];
 }
 
 interface InventoryTableProps {
@@ -125,6 +128,7 @@ export function InventoryTable({
     color: string;
     sku: string;
     stockQuantity: number;
+    mapLocation: string[];
   }>({
     description: '',
     price: 0,
@@ -136,7 +140,45 @@ export function InventoryTable({
     color: '',
     sku: '',
     stockQuantity: 0,
+    mapLocation: [],
   });
+
+  const [mapLocationOptions, setMapLocationOptions] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    const fetchMapLocations = async () => {
+      try {
+        const res = await apiClient.get('/Stores');
+        const storeList = res.data || [];
+        const set = new Set<string>();
+
+        storeList.forEach((s: any) => {
+          if (s.mapData) {
+            try {
+              const parsed = JSON.parse(s.mapData);
+              const objects = parsed.objects || [];
+              objects.forEach((obj: any) => {
+                if (obj.customName) set.add(obj.customName);
+                if (obj.text && typeof obj.text === 'string' && obj.text.trim().length > 0) {
+                  set.add(obj.text.trim());
+                }
+              });
+            } catch (e) {}
+          }
+        });
+
+        if (set.size === 0) {
+          ['CAJA', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5', 'C1', 'C2', 'C3', 'C4', 'C5'].forEach((l) => set.add(l));
+        }
+
+        setMapLocationOptions(Array.from(set));
+      } catch (err) {
+        setMapLocationOptions(['CAJA', 'A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5', 'C1', 'C2', 'C3', 'C4', 'C5']);
+      }
+    };
+
+    fetchMapLocations();
+  }, []);
 
   // Sorting & Pagination
   const [orderBy, setOrderBy] = React.useState<keyof InventoryItem>('description');
@@ -346,6 +388,7 @@ export function InventoryTable({
       color: item.color || '',
       sku: item.sku || '',
       stockQuantity: item.stockQuantity || 0,
+      mapLocation: item.mapLocation && Array.isArray(item.mapLocation) ? item.mapLocation : [],
     });
   };
 
@@ -365,6 +408,7 @@ export function InventoryTable({
         color: editForm.color,
         sku: editForm.sku,
         stockQuantity: Number(editForm.stockQuantity),
+        mapLocation: editForm.mapLocation,
       };
 
       if (onUpdateProduct) {
@@ -697,6 +741,12 @@ export function InventoryTable({
                   </TableSortLabel>
                 </TableCell>
 
+                <TableCell style={{ width: '12%' }}>
+                  <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase' }}>
+                    Ubicación en Mapa
+                  </Typography>
+                </TableCell>
+
                 <TableCell align="right" style={{ width: '5%' }}>
                   Acciones
                 </TableCell>
@@ -706,7 +756,7 @@ export function InventoryTable({
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 8 }}>
+                  <TableCell colSpan={10} align="center" sx={{ py: 8 }}>
                     <Stack spacing={2} alignItems="center">
                       <CircularProgress size={40} />
                       <Typography variant="body2" color="text.secondary">
@@ -717,7 +767,7 @@ export function InventoryTable({
                 </TableRow>
               ) : paginatedItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 8 }}>
+                  <TableCell colSpan={10} align="center" sx={{ py: 8 }}>
                     <Stack spacing={1.5} alignItems="center">
                       <PackageIcon size={48} color="var(--mui-palette-text-disabled)" />
                       <Typography variant="h6" color="text.secondary">
@@ -836,6 +886,26 @@ export function InventoryTable({
                           size="small"
                           sx={{ fontWeight: 700, px: 1 }}
                         />
+                      </TableCell>
+
+                      <TableCell>
+                        {item.mapLocation && Array.isArray(item.mapLocation) && item.mapLocation.length > 0 ? (
+                          <Stack direction="row" spacing={0.5} flexWrap="wrap" gap={0.5}>
+                            {item.mapLocation.map((loc) => (
+                              <Chip
+                                key={loc}
+                                label={loc}
+                                size="small"
+                                color="primary"
+                                sx={{ fontWeight: 700, fontSize: 10, height: 20 }}
+                              />
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Typography variant="caption" color="text.disabled">
+                            Sin ubicación
+                          </Typography>
+                        )}
                       </TableCell>
 
                       <TableCell align="right">
@@ -1070,6 +1140,11 @@ export function InventoryTable({
                     />
                   </Grid>
                 </Grid>
+
+                <MapLocationPicker
+                  selectedLocations={editForm.mapLocation || []}
+                  onChange={(locations) => setEditForm((prev) => ({ ...prev, mapLocation: locations }))}
+                />
               </Stack>
             )}
 
