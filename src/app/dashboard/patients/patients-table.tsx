@@ -112,7 +112,7 @@ export function PatientsTable({
                                                 </Typography>
                                             </Stack>
                                             <Typography variant="body2" color="text.secondary">
-                                                {row.group?.name || 'No Group'} • {row.clinic?.name || 'No Clinic'} • <strong style={{ color: (row.balance ?? 0) < 0 ? 'var(--mui-palette-error-main)' : (row.balance ?? 0) > 0 ? 'var(--mui-palette-success-main)' : 'inherit' }}>${(row.balance ?? 0).toFixed(2)}</strong>
+                                                {row.group?.name || 'No Group'} • {row.clinic?.name || 'No Store'} • <strong style={{ color: (row.balance ?? 0) < 0 ? 'var(--mui-palette-error-main)' : (row.balance ?? 0) > 0 ? 'var(--mui-palette-success-main)' : 'inherit' }}>${(row.balance ?? 0).toFixed(2)}</strong>
                                             </Typography>
                                             <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
                                                 {row.activeRehabServices?.map(s => (
@@ -146,7 +146,7 @@ export function PatientsTable({
                                 <TableCell># appts</TableCell>
                                 <TableCell align="center">Reevaluation?</TableCell>
                                 <TableCell>Patient Group</TableCell>
-                                <TableCell>Clinic</TableCell>
+                                <TableCell>Store</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>

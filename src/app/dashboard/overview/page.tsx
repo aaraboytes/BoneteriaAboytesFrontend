@@ -711,7 +711,7 @@ export default function DashboardPulsePage(): React.JSX.Element {
                 }}
               />
             }
-            label={clinicOpen ? 'Clinic Open' : 'Clinic Closed'}
+            label={clinicOpen ? 'Store Open' : 'Store Closed'}
             variant="outlined"
             onClick={() => setClinicOpen(!clinicOpen)}
             sx={{
@@ -1614,7 +1614,7 @@ export default function DashboardPulsePage(): React.JSX.Element {
                   </Typography>
                 </Stack>
               }
-              subheader={`Aggregate percentage usage against clinic runtime timeframe (${timeframe === 'week' ? 'This Week' : 'This Month'})`}
+              subheader={`Aggregate percentage usage against store runtime timeframe (${timeframe === 'week' ? 'This Week' : 'This Month'})`}
               sx={{ p: 3, pb: 0 }}
             />
             <CardContent sx={{ p: 3 }}>

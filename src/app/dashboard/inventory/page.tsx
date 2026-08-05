@@ -79,6 +79,7 @@ export default function InventoryPage(): React.JSX.Element {
             cost: p.cost,
             stockQuantity: v?.inventory?.stockQuantity ?? 10,
             barcodes: v?.barcodes ? v.barcodes.map((b: any) => b.barcode) : [],
+            mapLocation: p.mapLocation && Array.isArray(p.mapLocation) ? p.mapLocation : [],
           };
         });
         setItems(fallbackItems);

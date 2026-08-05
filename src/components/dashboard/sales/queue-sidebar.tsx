@@ -118,7 +118,7 @@ export function QueueSidebar({ onSelectSale, selectedId, refreshTrigger = 0 }: Q
             <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 1 }}>
                 {pendingSales.length === 0 ? (
                     <Box sx={{ textAlign: 'center', mt: 10, px: 2, opacity: 0.6 }}>
-                        <Typography variant="body1" fontWeight={600}>Clinic is caught up!</Typography>
+                        <Typography variant="body1" fontWeight={600}>Store is caught up!</Typography>
                         <Typography variant="body2">No pending sales.</Typography>
                     </Box>
                 ) : (

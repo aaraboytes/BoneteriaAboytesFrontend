@@ -189,7 +189,7 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
         let active = true;
         const fetchRefs = async () => {
             try {
-                const clinicsRes = await apiClient.get('/Clinics').catch(() => ({ data: [{ id: 1, name: 'Main Clinic' }] }));
+                const clinicsRes = await apiClient.get('/Clinics').catch(() => ({ data: [{ id: 1, name: 'Main Store' }] }));
                 if (active) {
                     setClinics(clinicsRes.data);
                     if (staff) {
@@ -292,7 +292,7 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
                 <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
                     <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile>
                         <Tab label="Personal & Role" />
-                        <Tab label="Clinic Info" />
+                        <Tab label="Store Info" />
                         <Tab label="Shift Schedule" />
                         <Tab label="Vacations" />
                         {isAdmin && isEditMode && <Tab label="Security" />}
@@ -334,7 +334,7 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
                         <TabPanel value={tabValue} index={1}>
                             <Stack spacing={3}>
                                 <Stack direction="row" spacing={2}>
-                                    <TextField select label="Clinic" fullWidth value={clinicId} onChange={(e) => setClinicId(Number(e.target.value))}>
+                                    <TextField select label="Store" fullWidth value={clinicId} onChange={(e) => setClinicId(Number(e.target.value))}>
                                         {clinics.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
                                     </TextField>
                                     <TextField label="Base Consultation Fee" type="number" fullWidth value={baseConsultationFee} onChange={(e) => setBaseConsultationFee(Number(e.target.value))} InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }} />

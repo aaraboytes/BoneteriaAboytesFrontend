@@ -1653,7 +1653,7 @@ export function ExpedientDialog({ open, patient: patientProp, onClose, onEdit, o
                     {selectedTx && (
                         <Box sx={{ p: 2, bgcolor: '#f8fafc', borderRadius: 1 }}>
                             <Box sx={{ mb: 2, textAlign: 'center' }}>
-                                <Typography variant="h6" fontWeight={700} color="primary">CLINIC SYSTEM</Typography>
+                                <Typography variant="h6" fontWeight={700} color="primary">STORE SYSTEM</Typography>
                                 <Typography variant="caption" color="text.secondary">Receipt of Transaction</Typography>
                             </Box>
 

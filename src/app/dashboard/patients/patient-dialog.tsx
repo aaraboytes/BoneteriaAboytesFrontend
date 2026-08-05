@@ -209,7 +209,7 @@ export function PatientDialog({ open, patient, onClose, onSuccess }: PatientDial
         let active = true;
         const fetchRefs = async () => {
             try {
-                const clinicsRes = await apiClient.get('/Clinics').catch(() => ({ data: [{ id: 1, name: 'Main Clinic' }] }));
+                const clinicsRes = await apiClient.get('/Clinics').catch(() => ({ data: [{ id: 1, name: 'Main Store' }] }));
                 const groupsRes = await apiClient.get('/PatientGroups').catch(() => ({ data: [{ id: 1, name: 'General' }, { id: 2, name: 'VIP' }] }));
                 const servicesRes = await apiClient.get('/Services').catch(() => ({ data: [] }));
                 const usersRes = await apiClient.get('/Users').catch(() => ({ data: [] }));
@@ -561,7 +561,7 @@ export function PatientDialog({ open, patient, onClose, onSuccess }: PatientDial
                                 <TextField label="Referred By" fullWidth value={referredBy} onChange={(e) => setReferredBy(e.target.value)} />
                             </Grid>
                             <Grid size={{ xs: 12, sm: 6 }}>
-                                <TextField required select label="Clinic" fullWidth value={clinicId} onChange={(e) => setClinicId(Number(e.target.value))}>
+                                <TextField required select label="Store" fullWidth value={clinicId} onChange={(e) => setClinicId(Number(e.target.value))}>
                                     {clinics.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
                                 </TextField>
                             </Grid>
@@ -765,7 +765,7 @@ export function PatientDialog({ open, patient, onClose, onSuccess }: PatientDial
                                     Now then, derived from the treatments and therapies to which I will be subjected, I understand that there are different risks derived from the handling of the different techniques and methods that can be used in the same, among which there may be irritation, redness, allergic reactions, burns by the different devices or materials used, hematomas, injuries to the different parts of the body such as cervical, dorsal, lumbar, sacral areas, extremities in their entirety, joints and soft tissues, or any area prone to it, reduction of mobilization in different parts of the body, weakening of the same, nerve injuries, as well as there may be complications that derive in internal or external hemorrhages, paralysis in its different modes or any other complication, injury or problem not mentioned above, including death.
                                 </Typography>
                                 <Typography variant="body2" component="p" sx={{ mb: 1.5, textAlign: 'justify' }}>
-                                    In the same way, I understand that the treatment according to the method used may require maneuvers or interventions that have to be carried out in order to progress in rehabilitation, which may require contact with intimate parts of my body, a situation of which I am aware and manifest my conformity, being able, if it is my desire, at any time to suspend or stop the treatment, prior notice to the clinic staff.
+                                    In the same way, I understand that the treatment according to the method used may require maneuvers or interventions that have to be carried out in order to progress in rehabilitation, which may require contact with intimate parts of my body, a situation of which I am aware and manifest my conformity, being able, if it is my desire, at any time to suspend or stop the treatment, prior notice to the store staff.
                                 </Typography>
                                 <Typography variant="body2" component="p" sx={{ mb: 1.5, textAlign: 'justify' }}>
                                     I grant my consent and authorize Terapia Física del Potosí, S.C. to perform the treatment described above and in full use of my mental faculties and in legal capacity (articles 80, 81, 82 and 83 of the Health Law), or in my condition of:

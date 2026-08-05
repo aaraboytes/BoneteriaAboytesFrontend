@@ -89,7 +89,7 @@ export default function ProductsPage(): React.JSX.Element {
                         <Stack spacing={1}>
                             <Typography variant="h4">Products</Typography>
                             <Typography variant="body2" color="text.secondary">
-                                Manage your clinic's product catalog and inventory.
+                                Manage your store's product catalog and inventory.
                             </Typography>
                         </Stack>
                         <Button

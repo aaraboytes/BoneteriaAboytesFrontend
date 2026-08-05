@@ -34,7 +34,7 @@ const CANCELLATION_REASONS = [
     'Found another provider',
     'Staff member sick/unavailable',
     'Equipment breakdown',
-    'Clinic holiday/closure',
+    'Store holiday/closure',
     'Staff error',
     'Insurance/Authorization issues',
     'No longer needed',

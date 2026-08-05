@@ -40,6 +40,7 @@ import {
 } from '@mui/material';
 import apiClient from '@/lib/api-client';
 import { MapLocationPicker } from '../products/map-location-picker';
+import { StoreMapDialog } from './store-map-dialog';
 import {
   MagnifyingGlass as SearchIcon,
   Funnel as FilterIcon,
@@ -53,6 +54,7 @@ import {
   Sparkle as SparkleIcon,
   ArrowsLeftRight as TransferIcon,
   Plus as PlusIcon,
+  MapTrifold as MapIcon,
 } from '@phosphor-icons/react';
 
 export interface InventoryItem {
@@ -102,6 +104,10 @@ export function InventoryTable({
   onOpenIntake,
   onOpenMissing,
 }: InventoryTableProps): React.JSX.Element {
+  // Store Map Dialog State
+  const [mapDialogOpen, setMapDialogOpen] = React.useState<boolean>(false);
+  const [hoveredItem, setHoveredItem] = React.useState<InventoryItem | null>(null);
+
   // Global search autocomplete state
   const [globalSearch, setGlobalSearch] = React.useState<string>('');
 
@@ -453,6 +459,16 @@ export function InventoryTable({
             )}
 
             <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" sx={{ gap: 1 }}>
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                startIcon={<MapIcon size={18} weight="bold" />}
+                onClick={() => setMapDialogOpen(true)}
+                sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
+              >
+                Mapa
+              </Button>
               {onOpenMissing && (
                 <Button
                   variant="contained"
@@ -790,7 +806,16 @@ export function InventoryTable({
                   const isLow = item.stockQuantity > 0 && item.stockQuantity <= 5;
 
                   return (
-                    <TableRow hover key={item.productVariantId || item.id} sx={{ transition: 'background-color 0.15s' }}>
+                    <TableRow
+                      hover
+                      key={item.productVariantId || item.id}
+                      onMouseEnter={() => setHoveredItem(item)}
+                      onMouseLeave={() => setHoveredItem(null)}
+                      sx={{
+                        transition: 'background-color 0.15s',
+                        bgcolor: hoveredItem?.productVariantId === item.productVariantId ? '#eff6ff' : 'inherit',
+                      }}
+                    >
                       <TableCell>
                         <Typography variant="subtitle2" fontWeight={700} color="primary.main">
                           #{item.productId || item.sku}
@@ -1269,6 +1294,17 @@ export function InventoryTable({
           </DialogActions>
         </Dialog>
       )}
+
+      {/* Interactive Store Map Dialog Modal */}
+      <StoreMapDialog
+        open={mapDialogOpen}
+        onClose={() => setMapDialogOpen(false)}
+        items={items}
+        stores={stores}
+        selectedStoreId={selectedStoreId}
+        hoveredItem={hoveredItem}
+        onHoverItem={setHoveredItem}
+      />
     </Stack>
   );
 }

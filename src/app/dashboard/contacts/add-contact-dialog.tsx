@@ -135,7 +135,7 @@ export function AddContactDialog({ open, contact, onClose, onSuccess }: AddConta
                         </Grid>
                         <Grid size={{ xs: 12, sm: 6 }}>
                             <TextField 
-                                label="Clinic" 
+                                label="Store" 
                                 fullWidth 
                                 value={clinic} 
                                 onChange={(e) => setClinic(e.target.value)} 
