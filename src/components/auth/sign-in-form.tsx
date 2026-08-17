@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import RouterLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Alert from '@mui/material/Alert';
@@ -9,22 +8,20 @@ import Button from '@mui/material/Button';
 import FormControl from '@mui/material/FormControl';
 import FormHelperText from '@mui/material/FormHelperText';
 import InputLabel from '@mui/material/InputLabel';
-import Link from '@mui/material/Link';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { EyeIcon } from '@phosphor-icons/react/dist/ssr/Eye';
-import { EyeSlashIcon } from '@phosphor-icons/react/dist/ssr/EyeSlash';
+import { Eye as EyeIcon } from '@phosphor-icons/react/dist/ssr/Eye';
+import { EyeSlash as EyeSlashIcon } from '@phosphor-icons/react/dist/ssr/EyeSlash';
 import { Controller, useForm } from 'react-hook-form';
 import { z as zod } from 'zod';
 
-import { paths } from '@/paths';
 import { authClient } from '@/lib/auth/client';
 import { useUser } from '@/hooks/use-user';
 
 const schema = zod.object({
-  email: zod.string().min(1, { message: 'Email is required' }).email(),
-  password: zod.string().min(1, { message: 'Password is required' }),
+  email: zod.string().min(1, { message: 'Nombre de usuario o correo es requerido' }),
+  password: zod.string().min(1, { message: 'Contraseña requerida' }),
 });
 
 type Values = zod.infer<typeof schema>;
@@ -33,11 +30,8 @@ const defaultValues = { email: '', password: '' } satisfies Values;
 
 export function SignInForm(): React.JSX.Element {
   const router = useRouter();
-
   const { checkSession } = useUser();
-
-  const [showPassword, setShowPassword] = React.useState<boolean>();
-
+  const [showPassword, setShowPassword] = React.useState<boolean>(false);
   const [isPending, setIsPending] = React.useState<boolean>(false);
 
   const {
@@ -54,16 +48,15 @@ export function SignInForm(): React.JSX.Element {
       const { error } = await authClient.signInWithPassword(values);
 
       if (error) {
-        setError('root', { type: 'server', message: error });
+        setError('root', {
+          type: 'server',
+          message: error === 'Invalid credentials' ? 'Usuario o contraseña incorrectos' : error,
+        });
         setIsPending(false);
         return;
       }
 
-      // Refresh the auth state
       await checkSession?.();
-
-      // UserProvider, for this case, will not refresh the router
-      // After refresh, GuestGuard will handle the redirect
       router.refresh();
     },
     [checkSession, router, setError]
@@ -72,69 +65,90 @@ export function SignInForm(): React.JSX.Element {
   return (
     <Stack spacing={4}>
       <Stack spacing={1}>
-        <Typography variant="h4">Sign in</Typography>
+        <Typography variant="h4" sx={{ fontWeight: 800, color: '#0f172a' }}>
+          Iniciar Sesión
+        </Typography>
         <Typography color="text.secondary" variant="body2">
-          Don&apos;t have an account?{' '}
-          <Link component={RouterLink} href={paths.auth.signUp} underline="hover" variant="subtitle2">
-            Sign up
-          </Link>
+          Ingresa tus credenciales para acceder al sistema POS.
         </Typography>
       </Stack>
+
       <form onSubmit={handleSubmit(onSubmit)}>
-        <Stack spacing={2}>
+        <Stack spacing={3}>
           <Controller
             control={control}
             name="email"
             render={({ field }) => (
-              <FormControl error={Boolean(errors.email)}>
-                <InputLabel>Email address</InputLabel>
-                <OutlinedInput {...field} label="Email address" type="email" />
+              <FormControl error={Boolean(errors.email)} fullWidth>
+                <InputLabel>Usuario o Correo Electrónico</InputLabel>
+                <OutlinedInput
+                  {...field}
+                  label="Usuario o Correo Electrónico"
+                  type="text"
+                  sx={{ borderRadius: 2 }}
+                />
                 {errors.email ? <FormHelperText>{errors.email.message}</FormHelperText> : null}
               </FormControl>
             )}
           />
+
           <Controller
             control={control}
             name="password"
             render={({ field }) => (
-              <FormControl error={Boolean(errors.password)}>
-                <InputLabel>Password</InputLabel>
+              <FormControl error={Boolean(errors.password)} fullWidth>
+                <InputLabel>Contraseña</InputLabel>
                 <OutlinedInput
                   {...field}
+                  label="Contraseña"
+                  type={showPassword ? 'text' : 'password'}
+                  sx={{ borderRadius: 2 }}
                   endAdornment={
                     showPassword ? (
                       <EyeIcon
-                        cursor="pointer"
-                        fontSize="var(--icon-fontSize-md)"
+                        style={{ cursor: 'pointer' }}
+                        size={20}
                         onClick={(): void => {
                           setShowPassword(false);
                         }}
                       />
                     ) : (
                       <EyeSlashIcon
-                        cursor="pointer"
-                        fontSize="var(--icon-fontSize-md)"
+                        style={{ cursor: 'pointer' }}
+                        size={20}
                         onClick={(): void => {
                           setShowPassword(true);
                         }}
                       />
                     )
                   }
-                  label="Password"
-                  type={showPassword ? 'text' : 'password'}
                 />
                 {errors.password ? <FormHelperText>{errors.password.message}</FormHelperText> : null}
               </FormControl>
             )}
           />
-          <div>
-            <Link component={RouterLink} href={paths.auth.resetPassword} variant="subtitle2">
-              Forgot password?
-            </Link>
-          </div>
-          {errors.root ? <Alert color="error">{errors.root.message}</Alert> : null}
-          <Button disabled={isPending} type="submit" variant="contained">
-            Sign in
+
+          {errors.root ? <Alert color="error" sx={{ borderRadius: 2 }}>{errors.root.message}</Alert> : null}
+
+          <Button
+            disabled={isPending}
+            type="submit"
+            variant="contained"
+            size="large"
+            sx={{
+              py: 1.5,
+              borderRadius: 2,
+              fontWeight: 700,
+              fontSize: '1rem',
+              background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
+              boxShadow: '0 4px 12px rgba(25, 118, 210, 0.3)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #1565c0 0%, #0d47a1 100%)',
+                boxShadow: '0 6px 16px rgba(25, 118, 210, 0.4)',
+              },
+            }}
+          >
+            {isPending ? 'Iniciando sesión...' : 'Ingresar'}
           </Button>
         </Stack>
       </form>

@@ -8,6 +8,7 @@ export const navItems = [
   { key: 'stores', title: 'Sucursales / Tiendas', href: paths.dashboard.stores, icon: 'buildings' },
   { key: 'cashClosing', title: 'Cash Closing', href: paths.dashboard.billing.cashClosing, icon: 'receipt' },
   { key: 'products', title: 'Products', href: paths.dashboard.products, icon: 'package' },
+  { key: 'suppliers', title: 'Proveedores', href: paths.dashboard.suppliers, icon: 'truck' },
   { key: 'services', title: 'Services', href: paths.dashboard.services, icon: 'headset' },
   { key: 'customers', title: 'Customers', href: paths.dashboard.customers, icon: 'users' },
   { key: 'staff', title: 'Staff', href: paths.dashboard.staff, icon: 'user' },

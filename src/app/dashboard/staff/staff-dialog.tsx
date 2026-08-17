@@ -125,9 +125,10 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
     const [vacationDialogOpen, setVacationDialogOpen] = React.useState(false);
 
     const [fullName, setFullName] = React.useState('');
+    const [username, setUsername] = React.useState('');
     const [email, setEmail] = React.useState('');
     const [password, setPassword] = React.useState('');
-    const [role, setRole] = React.useState('doctor');
+    const [role, setRole] = React.useState('Empleado');
     const [specialty, setSpecialty] = React.useState('');
     const [baseConsultationFee, setBaseConsultationFee] = React.useState<number>(0);
     const [address, setAddress] = React.useState('');
@@ -156,9 +157,10 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
 
         if (staff) {
             setFullName(staff.fullName);
+            setUsername(staff.username || staff.fullName.toLowerCase().replace(/\s+/g, ''));
             setEmail(staff.email);
             setPassword('');
-            setRole(staff.role || 'doctor');
+            setRole(staff.role || 'Empleado');
             setSpecialty(staff.specialty || '');
             setBaseConsultationFee(staff.baseConsultationFee || 0);
             setAddress(staff.address || '');
@@ -171,9 +173,10 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
             setManualId(staff.id);
         } else {
             setFullName('');
+            setUsername('');
             setEmail('');
             setPassword('');
-            setRole('doctor');
+            setRole('Empleado');
             setSpecialty('');
             setBaseConsultationFee(0);
             setAddress('');
@@ -225,6 +228,7 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
 
         const payload = {
             fullName,
+            username: username.replace(/\s+/g, ''),
             email,
             password: password || undefined,
             role,
@@ -311,19 +315,38 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
                                         onChange={(e) => setManualId(e.target.value === '' ? '' : Number(e.target.value))}
                                         disabled={!isEditMode}
                                     />
-                                    <TextField label="Full Name" fullWidth value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                                    <TextField
+                                        label="Full Name"
+                                        fullWidth
+                                        value={fullName}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setFullName(val);
+                                            if (!isEditMode && !username) {
+                                                setUsername(val.toLowerCase().replace(/\s+/g, ''));
+                                            }
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Username (Usuario)"
+                                        fullWidth
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value.replace(/\s+/g, ''))}
+                                        helperText="Sin espacios"
+                                    />
                                     <TextField label="Email" type="email" fullWidth value={email} onChange={(e) => setEmail(e.target.value)} />
                                 </Stack>
                                 {!isEditMode && (
                                     <TextField label="Password" type="password" fullWidth value={password} onChange={(e) => setPassword(e.target.value)} helperText="Required for new staff to log in." />
                                 )}
                                 <Stack direction="row" spacing={2}>
-                                    <TextField select label="Role" fullWidth value={role} onChange={(e) => setRole(e.target.value)}>
-                                        <MenuItem value="doctor">Doctor</MenuItem>
-                                        <MenuItem value="staff">Staff / Nurse</MenuItem>
-                                        <MenuItem value="reception">Reception</MenuItem>
-                                        <MenuItem value="admin">Admin</MenuItem>
-                                        <MenuItem value="developer">Developer</MenuItem>
+                                    <TextField select label="Rol de Usuario" fullWidth value={role} onChange={(e) => setRole(e.target.value)}>
+                                        <MenuItem value="Administrador">Administrador</MenuItem>
+                                        <MenuItem value="Desarrollador">Desarrollador</MenuItem>
+                                        <MenuItem value="Jefe">Jefe</MenuItem>
+                                        <MenuItem value="Gerente">Gerente</MenuItem>
+                                        <MenuItem value="Empleado">Empleado</MenuItem>
+                                        <MenuItem value="Bodega">Bodega</MenuItem>
                                     </TextField>
                                     <TextField label="Specialty" fullWidth value={specialty} onChange={(e) => setSpecialty(e.target.value)} placeholder="e.g. Cardiologist" />
                                 </Stack>

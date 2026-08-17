@@ -16,6 +16,7 @@ import { Wrench as WrenchIcon } from '@phosphor-icons/react/dist/ssr/Wrench';
 import { Buildings as BuildingsIcon } from '@phosphor-icons/react/dist/ssr/Buildings';
 import { Stack as StackIcon } from '@phosphor-icons/react/dist/ssr/Stack';
 import { Receipt as ReceiptIcon } from '@phosphor-icons/react/dist/ssr/Receipt';
+import { Truck as TruckIcon } from '@phosphor-icons/react/dist/ssr/Truck';
 
 export const navIcons = {
   'chart-pie': ChartPieIcon,
@@ -30,6 +31,7 @@ export const navIcons = {
   'microscope': Microscope,
   'headset': Headset,
   'package': PackageIcon,
+  'truck': TruckIcon,
   'clipboard-text': ClipboardTextIcon,
   'wrench': WrenchIcon,
   'buildings': BuildingsIcon,

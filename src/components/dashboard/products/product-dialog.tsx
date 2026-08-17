@@ -46,9 +46,22 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
     });
 
     const [availableLocations, setAvailableLocations] = React.useState<string[]>([]);
+    const [supplierOptions, setSupplierOptions] = React.useState<string[]>([]);
 
     React.useEffect(() => {
         if (!open) return;
+
+        const fetchSuppliers = async () => {
+            try {
+                const res = await apiClient.get('/Suppliers');
+                if (Array.isArray(res.data)) {
+                    const names = res.data.map((s: any) => s.name).filter(Boolean);
+                    setSupplierOptions(Array.from(new Set(names)).sort());
+                }
+            } catch (err) {
+                console.error('Failed to load suppliers:', err);
+            }
+        };
 
         const fetchStoreMapLocations = async () => {
             try {
@@ -86,6 +99,7 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
             }
         };
 
+        fetchSuppliers();
         fetchStoreMapLocations();
     }, [open]);
 
@@ -197,6 +211,33 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     />
+
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                        <Autocomplete
+                            options={supplierOptions}
+                            value={
+                                typeof formData.supplier === 'object' && formData.supplier
+                                    ? formData.supplier.name
+                                    : (formData.supplier || formData.provider || null)
+                            }
+                            onChange={(_, newValue) =>
+                                setFormData((prev) => ({ ...prev, provider: newValue || '', supplier: newValue || '' }))
+                            }
+                            onInputChange={(_, newInputValue) =>
+                                setFormData((prev) => ({ ...prev, provider: newInputValue, supplier: newInputValue }))
+                            }
+                            freeSolo
+                            fullWidth
+                            renderInput={(params) => <TextField {...params} label="Proveedor / Marca" fullWidth />}
+                        />
+                        <TextField
+                            label="Modelo"
+                            fullWidth
+                            value={typeof formData.model === 'object' && formData.model ? formData.model.name : (formData.model || '')}
+                            onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                            placeholder="Ej. Slim Fit, Modelo 2026, Clasico..."
+                        />
+                    </Stack>
 
                     <Stack direction="row" spacing={2}>
                         <FormControl fullWidth required>

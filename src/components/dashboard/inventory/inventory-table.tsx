@@ -66,6 +66,7 @@ export interface InventoryItem {
   provider: string;
   department: string;
   genre: string;
+  model?: string;
   size: string;
   color: string;
   price: number;
@@ -115,6 +116,7 @@ export function InventoryTable({
   const [descriptionFilter, setDescriptionFilter] = React.useState<string>('');
   const [providerFilter, setProviderFilter] = React.useState<string | null>(null);
   const [genreFilter, setGenreFilter] = React.useState<string | null>(null);
+  const [modelFilter, setModelFilter] = React.useState<string | null>(null);
   const [sizeFilter, setSizeFilter] = React.useState<string | null>(null);
   const [colorFilter, setColorFilter] = React.useState<string | null>(null);
   const [stockStatusFilter, setStockStatusFilter] = React.useState<string | null>(null);
@@ -130,6 +132,7 @@ export function InventoryTable({
     provider: string;
     department: string;
     genre: string;
+    model: string;
     size: string;
     color: string;
     sku: string;
@@ -142,6 +145,7 @@ export function InventoryTable({
     provider: '',
     department: '',
     genre: '',
+    model: '',
     size: '',
     color: '',
     sku: '',
@@ -197,14 +201,31 @@ export function InventoryTable({
   const [newStockVal, setNewStockVal] = React.useState<number>(0);
   const [adjusting, setAdjusting] = React.useState(false);
 
+  // Backend suppliers list
+  const [backendSuppliers, setBackendSuppliers] = React.useState<Array<{ id: number; name: string }>>([]);
+
+  React.useEffect(() => {
+    apiClient
+      .get('/Suppliers')
+      .then((res) => {
+        if (Array.isArray(res.data)) {
+          setBackendSuppliers(res.data);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch backend suppliers:', err));
+  }, []);
+
   // Extract unique values for column autocomplete dropdowns
   const providerOptions = React.useMemo(() => {
     const set = new Set<string>();
+    backendSuppliers.forEach((s) => {
+      if (s.name) set.add(s.name);
+    });
     items.forEach((i) => {
       if (i.provider && i.provider !== 'Sin Proveedor') set.add(i.provider);
     });
     return Array.from(set).sort();
-  }, [items]);
+  }, [items, backendSuppliers]);
 
   const departmentOptions = React.useMemo(() => {
     const set = new Set<string>();
@@ -218,6 +239,14 @@ export function InventoryTable({
     const set = new Set<string>();
     items.forEach((i) => {
       if (i.genre && i.genre !== 'N/A') set.add(i.genre);
+    });
+    return Array.from(set).sort();
+  }, [items]);
+
+  const modelOptions = React.useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((i) => {
+      if (i.model && i.model !== 'N/A') set.add(i.model);
     });
     return Array.from(set).sort();
   }, [items]);
@@ -246,6 +275,7 @@ export function InventoryTable({
     items.slice(0, 1500).forEach((i) => {
       if (i.description) optionsSet.add(i.description);
       if (i.provider && i.provider !== 'Sin Proveedor') optionsSet.add(i.provider);
+      if (i.model && i.model !== 'N/A') optionsSet.add(i.model);
       if (i.sku) optionsSet.add(i.sku);
       if (i.barcodes) i.barcodes.forEach((b) => optionsSet.add(b));
     });
@@ -260,11 +290,12 @@ export function InventoryTable({
         const q = globalSearch.toLowerCase().trim();
         const matchesDesc = item.description?.toLowerCase().includes(q);
         const matchesProvider = item.provider?.toLowerCase().includes(q);
+        const matchesModel = item.model?.toLowerCase().includes(q);
         const matchesSku = item.sku?.toLowerCase().includes(q);
         const matchesColor = item.color?.toLowerCase().includes(q);
         const matchesSize = item.size?.toLowerCase().includes(q);
         const matchesBarcode = item.barcodes?.some((b) => b.toLowerCase().includes(q));
-        if (!matchesDesc && !matchesProvider && !matchesSku && !matchesColor && !matchesSize && !matchesBarcode) {
+        if (!matchesDesc && !matchesProvider && !matchesModel && !matchesSku && !matchesColor && !matchesSize && !matchesBarcode) {
           return false;
         }
       }
@@ -286,17 +317,22 @@ export function InventoryTable({
         if (item.genre !== genreFilter) return false;
       }
 
-      // 5. Column Size Filter
+      // 5. Column Model Filter
+      if (modelFilter) {
+        if (item.model !== modelFilter) return false;
+      }
+
+      // 6. Column Size Filter
       if (sizeFilter) {
         if (item.size !== sizeFilter) return false;
       }
 
-      // 6. Column Color Filter
+      // 7. Column Color Filter
       if (colorFilter) {
         if (item.color !== colorFilter) return false;
       }
 
-      // 7. Column Stock Status Filter
+      // 8. Column Stock Status Filter
       if (stockStatusFilter) {
         if (stockStatusFilter === 'En Existencia (>0)' && item.stockQuantity <= 0) return false;
         if (stockStatusFilter === 'Poco Stock (1 - 5)' && (item.stockQuantity <= 0 || item.stockQuantity > 5)) return false;
@@ -305,7 +341,7 @@ export function InventoryTable({
 
       return true;
     });
-  }, [items, globalSearch, descriptionFilter, providerFilter, genreFilter, sizeFilter, colorFilter, stockStatusFilter]);
+  }, [items, globalSearch, descriptionFilter, providerFilter, genreFilter, modelFilter, sizeFilter, colorFilter, stockStatusFilter]);
 
   // Sorting
   const sortedItems = React.useMemo(() => {
@@ -341,6 +377,7 @@ export function InventoryTable({
     setDescriptionFilter('');
     setProviderFilter(null);
     setGenreFilter(null);
+    setModelFilter(null);
     setSizeFilter(null);
     setColorFilter(null);
     setStockStatusFilter(null);
@@ -352,6 +389,7 @@ export function InventoryTable({
     descriptionFilter,
     providerFilter,
     genreFilter,
+    modelFilter,
     sizeFilter,
     colorFilter,
     stockStatusFilter,
@@ -390,6 +428,7 @@ export function InventoryTable({
       provider: item.provider || '',
       department: item.department || '',
       genre: item.genre || '',
+      model: item.model || '',
       size: item.size || '',
       color: item.color || '',
       sku: item.sku || '',
@@ -410,6 +449,7 @@ export function InventoryTable({
         provider: editForm.provider,
         department: editForm.department,
         genre: editForm.genre,
+        model: editForm.model,
         size: editForm.size,
         color: editForm.color,
         sku: editForm.sku,
@@ -592,7 +632,7 @@ export function InventoryTable({
 
               <Grid container spacing={1.5}>
                 {/* 1. Proveedor Autocomplete Filter */}
-                <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+                <Grid size={{ xs: 12, sm: 6, md: 2.2 }}>
                   <Autocomplete
                     options={providerOptions}
                     value={providerFilter}
@@ -607,7 +647,7 @@ export function InventoryTable({
                 </Grid>
 
                 {/* 2. Género Autocomplete Filter */}
-                <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+                <Grid size={{ xs: 12, sm: 6, md: 1.8 }}>
                   <Autocomplete
                     options={genreOptions}
                     value={genreFilter}
@@ -621,8 +661,23 @@ export function InventoryTable({
                   />
                 </Grid>
 
-                {/* 3. Talla Autocomplete Filter */}
-                <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+                {/* 3. Modelo Autocomplete Filter */}
+                <Grid size={{ xs: 12, sm: 6, md: 1.8 }}>
+                  <Autocomplete
+                    options={modelOptions}
+                    value={modelFilter}
+                    onChange={(_, val) => {
+                      setModelFilter(val);
+                      setPage(0);
+                    }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Modelo" size="small" placeholder="Todos" variant="outlined" />
+                    )}
+                  />
+                </Grid>
+
+                {/* 4. Talla Autocomplete Filter */}
+                <Grid size={{ xs: 12, sm: 6, md: 1.8 }}>
                   <Autocomplete
                     options={sizeOptions}
                     value={sizeFilter}
@@ -636,8 +691,8 @@ export function InventoryTable({
                   />
                 </Grid>
 
-                {/* 4. Color Autocomplete Filter */}
-                <Grid size={{ xs: 12, sm: 6, md: 2.6 }}>
+                {/* 5. Color Autocomplete Filter */}
+                <Grid size={{ xs: 12, sm: 6, md: 2.2 }}>
                   <Autocomplete
                     options={colorOptions}
                     value={colorFilter}
@@ -651,8 +706,8 @@ export function InventoryTable({
                   />
                 </Grid>
 
-                {/* 5. Stock Status Autocomplete Filter */}
-                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                {/* 6. Stock Status Autocomplete Filter */}
+                <Grid size={{ xs: 12, sm: 6, md: 2.2 }}>
                   <Autocomplete
                     options={stockStatusOptions}
                     value={stockStatusFilter}
@@ -717,6 +772,16 @@ export function InventoryTable({
                   </TableSortLabel>
                 </TableCell>
 
+                <TableCell style={{ width: '10%' }}>
+                  <TableSortLabel
+                    active={orderBy === 'model'}
+                    direction={orderBy === 'model' ? order : 'asc'}
+                    onClick={() => handleSort('model')}
+                  >
+                    Modelo
+                  </TableSortLabel>
+                </TableCell>
+
                 <TableCell style={{ width: '9%' }}>
                   <TableSortLabel
                     active={orderBy === 'size'}
@@ -772,7 +837,7 @@ export function InventoryTable({
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={10} align="center" sx={{ py: 8 }}>
+                  <TableCell colSpan={11} align="center" sx={{ py: 8 }}>
                     <Stack spacing={2} alignItems="center">
                       <CircularProgress size={40} />
                       <Typography variant="body2" color="text.secondary">
@@ -783,7 +848,7 @@ export function InventoryTable({
                 </TableRow>
               ) : paginatedItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} align="center" sx={{ py: 8 }}>
+                  <TableCell colSpan={11} align="center" sx={{ py: 8 }}>
                     <Stack spacing={1.5} alignItems="center">
                       <PackageIcon size={48} color="var(--mui-palette-text-disabled)" />
                       <Typography variant="h6" color="text.secondary">
@@ -859,6 +924,16 @@ export function InventoryTable({
                       <TableCell>
                         {item.genre && item.genre !== 'N/A' ? (
                           <Chip label={item.genre} size="small" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
+                        ) : (
+                          <Typography variant="caption" color="text.disabled">
+                            -
+                          </Typography>
+                        )}
+                      </TableCell>
+
+                      <TableCell>
+                        {item.model && item.model !== 'N/A' ? (
+                          <Chip label={item.model} size="small" color="info" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
                         ) : (
                           <Typography variant="caption" color="text.disabled">
                             -
@@ -1134,7 +1209,7 @@ export function InventoryTable({
                 </Grid>
 
                 <Grid container spacing={2}>
-                  <Grid size={{ xs: 12, sm: 4 }}>
+                  <Grid size={{ xs: 12, sm: 3 }}>
                     <Autocomplete
                       options={providerOptions}
                       value={editForm.provider || null}
@@ -1144,7 +1219,7 @@ export function InventoryTable({
                       renderInput={(params) => <TextField {...params} label="Proveedor / Marca" fullWidth />}
                     />
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 4 }}>
+                  <Grid size={{ xs: 12, sm: 3 }}>
                     <Autocomplete
                       options={departmentOptions}
                       value={editForm.department || null}
@@ -1154,7 +1229,7 @@ export function InventoryTable({
                       renderInput={(params) => <TextField {...params} label="Departamento" fullWidth />}
                     />
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 4 }}>
+                  <Grid size={{ xs: 12, sm: 3 }}>
                     <Autocomplete
                       options={genreOptions}
                       value={editForm.genre || null}
@@ -1162,6 +1237,16 @@ export function InventoryTable({
                       onInputChange={(_, newInputValue) => setEditForm((prev) => ({ ...prev, genre: newInputValue }))}
                       freeSolo
                       renderInput={(params) => <TextField {...params} label="Categoría / Género" fullWidth />}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 3 }}>
+                    <Autocomplete
+                      options={modelOptions}
+                      value={editForm.model || null}
+                      onChange={(_, newValue) => setEditForm((prev) => ({ ...prev, model: newValue || '' }))}
+                      onInputChange={(_, newInputValue) => setEditForm((prev) => ({ ...prev, model: newInputValue }))}
+                      freeSolo
+                      renderInput={(params) => <TextField {...params} label="Modelo" fullWidth />}
                     />
                   </Grid>
                 </Grid>

@@ -25,6 +25,12 @@ import {
   TextField,
   Typography,
   Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   createFilterOptions,
 } from '@mui/material';
 import {
@@ -34,10 +40,15 @@ import {
   Package as PackageIcon,
   CheckCircle as CheckIcon,
   MagnifyingGlass as SearchIcon,
+  FileArrowDown as FileArrowDownIcon,
+  FileArrowUp as FileArrowUpIcon,
 } from '@phosphor-icons/react';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import apiClient from '@/lib/api-client';
 import { InventoryItem } from './inventory-table';
 import { StoreSimple } from './stock-transfer-dialog';
+import { StockIntakeReportDialog, IntakeReportData } from './stock-intake-report-dialog';
 
 export interface SelectedIntakeItem {
   item: InventoryItem;
@@ -73,6 +84,9 @@ export function StockIntakeDialog({
   const [searchInputValue, setSearchInputValue] = React.useState<string>('');
   const [submitting, setSubmitting] = React.useState<boolean>(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [generatedReport, setGeneratedReport] = React.useState<IntakeReportData | null>(null);
+  const [showReportModal, setShowReportModal] = React.useState<boolean>(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Synchronize initial store selection when dialog opens
   React.useEffect(() => {
@@ -201,24 +215,214 @@ export function StockIntakeDialog({
     try {
       const payload = {
         storeId: selectedStoreId,
+        userName: 'Administrador',
         items: intakeItems.map((ti) => ({
           productVariantId: ti.item.productVariantId,
           quantity: ti.quantityToAdd,
         })),
       };
 
-      await apiClient.post('/Inventory/bulk-adjust', payload);
+      const res = await apiClient.post('/Inventory/bulk-adjust', payload);
 
-      const msg = `Producto añadido a ${storeName}`;
-      
+      const msg = `Ingreso registrado exitosamente en ${storeName}`;
       onSuccess(msg);
-      onClose();
+
+      if (res.data && res.data.report) {
+        setGeneratedReport(res.data.report);
+        setShowReportModal(true);
+      } else {
+        onClose();
+      }
     } catch (err: any) {
       console.error('Stock intake failed:', err);
       const serverMsg = err?.response?.data?.message || err?.message || 'Ocurrió un error al ingresar el inventario.';
       setErrorMessage(serverMsg);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleGenerateFormat = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Ingreso de Inventario');
+
+      worksheet.columns = [
+        { header: 'ID Producto', key: 'productId', width: 18 },
+        { header: 'SKU', key: 'sku', width: 18 },
+        { header: 'Descripción', key: 'description', width: 45 },
+        { header: 'Proveedor / Marca', key: 'provider', width: 25 },
+        { header: 'Modelo', key: 'model', width: 18 },
+        { header: 'Talla', key: 'size', width: 14 },
+        { header: 'Color', key: 'color', width: 14 },
+        { header: 'Stock Actual', key: 'currentStock', width: 15 },
+        { header: 'Cantidad', key: 'cantidad', width: 16 },
+      ];
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFF' }, size: 11 };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '15B79E' },
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 24;
+
+      const targetItems =
+        intakeItems.length > 0
+          ? intakeItems.map((i) => ({ item: i.item, qty: i.quantityToAdd || 0 }))
+          : storeInventory.map((i) => ({ item: i, qty: 0 }));
+
+      targetItems.forEach(({ item, qty }) => {
+        const row = worksheet.addRow({
+          productId: item.productId || item.productVariantId || item.id,
+          sku: item.sku || 'N/A',
+          description: item.description || 'Sin Descripción',
+          provider: item.provider || 'Sin Proveedor',
+          model: item.model || 'N/A',
+          size: item.size || 'N/A',
+          color: item.color || 'N/A',
+          currentStock: item.stockQuantity ?? 0,
+          cantidad: qty || 0,
+        });
+
+        row.getCell('currentStock').alignment = { horizontal: 'right' };
+        row.getCell('cantidad').alignment = { horizontal: 'right' };
+        row.getCell('cantidad').font = { bold: true };
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+      const storeObj = stores.find((s) => s.id === selectedStoreId);
+      const storeNameStr = storeObj ? storeObj.name.replace(/[^a-zA-Z0-9_-]/g, '_') : `Sucursal_${selectedStoreId}`;
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      saveAs(blob, `Formato_Ingreso_Inventario_${storeNameStr}_${dateStr}.xlsx`);
+    } catch (err) {
+      console.error('Failed to generate XLSX format:', err);
+    }
+  };
+
+  const handleImportButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFormat = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
+
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        setErrorMessage('El archivo Excel no contiene ninguna hoja de trabajo válida.');
+        return;
+      }
+
+      let idColIdx = -1;
+      let qtyColIdx = -1;
+      let skuColIdx = -1;
+
+      // Inspect header row (Row 1)
+      const headerRow = worksheet.getRow(1);
+      headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        const val = String(cell.value || '').trim().toLowerCase();
+        if (val.includes('id producto') || val === 'id' || val.includes('productid') || val.includes('id_producto')) {
+          idColIdx = colNumber;
+        } else if (val.includes('sku')) {
+          skuColIdx = colNumber;
+        } else if (val.includes('cantidad') || val.includes('amount') || val.includes('cant')) {
+          qtyColIdx = colNumber;
+        }
+      });
+
+      if (idColIdx === -1 && skuColIdx === -1) {
+        setErrorMessage('No se encontró la columna "ID Producto" o "SKU" en el archivo Excel.');
+        return;
+      }
+
+      if (qtyColIdx === -1) {
+        setErrorMessage('No se encontró la columna "Cantidad" en el archivo Excel.');
+        return;
+      }
+
+      // Build Map for fast O(1) inventory item matching
+      const inventoryByIdMap = new Map<string, InventoryItem>();
+      storeInventory.forEach((item) => {
+        if (item.productId !== undefined && item.productId !== null) inventoryByIdMap.set(String(item.productId).trim(), item);
+        if (item.productVariantId !== undefined && item.productVariantId !== null) inventoryByIdMap.set(String(item.productVariantId).trim(), item);
+        if (item.id !== undefined && item.id !== null) inventoryByIdMap.set(String(item.id).trim(), item);
+        if (item.sku) inventoryByIdMap.set(String(item.sku).trim().toLowerCase(), item);
+      });
+
+      const newIntakeItemsMap = new Map<string | number, SelectedIntakeItem>();
+      // Retain existing items if any
+      intakeItems.forEach((existing) => {
+        newIntakeItemsMap.set(existing.item.productVariantId || existing.item.id, existing);
+      });
+
+      let importedCount = 0;
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // Skip header row
+
+        const rawIdVal = idColIdx !== -1 ? row.getCell(idColIdx).value : null;
+        const rawSkuVal = skuColIdx !== -1 ? row.getCell(skuColIdx).value : null;
+        const rawQtyVal = row.getCell(qtyColIdx).value;
+
+        let qtyNum = 0;
+        if (typeof rawQtyVal === 'number') {
+          qtyNum = rawQtyVal;
+        } else if (typeof rawQtyVal === 'object' && rawQtyVal !== null && 'result' in rawQtyVal) {
+          qtyNum = Number((rawQtyVal as any).result) || 0;
+        } else if (typeof rawQtyVal === 'string') {
+          qtyNum = parseFloat(rawQtyVal.trim()) || 0;
+        }
+
+        if (qtyNum <= 0) return; // Only process items with quantity > 0
+
+        let matchedItem: InventoryItem | undefined;
+
+        if (rawIdVal !== null && rawIdVal !== undefined) {
+          const idStr = String(typeof rawIdVal === 'object' && 'result' in rawIdVal ? (rawIdVal as any).result : rawIdVal).trim();
+          matchedItem = inventoryByIdMap.get(idStr) || inventoryByIdMap.get(idStr.replace('.0', ''));
+        }
+
+        if (!matchedItem && rawSkuVal !== null && rawSkuVal !== undefined) {
+          const skuStr = String(typeof rawSkuVal === 'object' && 'result' in rawSkuVal ? (rawSkuVal as any).result : rawSkuVal).trim().toLowerCase();
+          matchedItem = inventoryByIdMap.get(skuStr);
+        }
+
+        if (matchedItem) {
+          const key = matchedItem.productVariantId || matchedItem.id;
+          newIntakeItemsMap.set(key, {
+            item: matchedItem,
+            quantityToAdd: qtyNum,
+          });
+          importedCount++;
+        }
+      });
+
+      const updatedList = Array.from(newIntakeItemsMap.values());
+      setIntakeItems(updatedList);
+
+      if (importedCount > 0) {
+        setErrorMessage(null);
+      } else {
+        setErrorMessage('No se encontraron productos coincidentes con cantidad > 0 en la sucursal seleccionada.');
+      }
+    } catch (err) {
+      console.error('Failed to import XLSX format:', err);
+      setErrorMessage('Error al importar el archivo Excel. Revisa el formato del archivo.');
+    } finally {
+      event.target.value = '';
     }
   };
 
@@ -375,11 +579,31 @@ export function StockIntakeDialog({
               <Typography variant="subtitle2" fontWeight={700}>
                 Productos a Ingresar ({intakeItems.length})
               </Typography>
-              {intakeItems.length > 0 && (
-                <Button size="small" color="secondary" onClick={() => setIntakeItems([])}>
-                  Limpiar Lista
+              <Stack direction="row" spacing={1}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  onClick={handleGenerateFormat}
+                  startIcon={<FileArrowDownIcon size={18} />}
+                >
+                  Generar formato (.xlsx)
                 </Button>
-              )}
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="info"
+                  onClick={handleImportButtonClick}
+                  startIcon={<FileArrowUpIcon size={18} />}
+                >
+                  Importar formato
+                </Button>
+                {intakeItems.length > 0 && (
+                  <Button size="small" color="secondary" onClick={() => setIntakeItems([])}>
+                    Limpiar Lista
+                  </Button>
+                )}
+              </Stack>
             </Stack>
 
             {intakeItems.length === 0 ? (
@@ -404,99 +628,71 @@ export function StockIntakeDialog({
                 </Stack>
               </Paper>
             ) : (
-              <Stack spacing={1.5} sx={{ maxHeight: 320, overflowY: 'auto', pr: 0.5 }}>
-                {intakeItems.map(({ item, quantityToAdd }) => {
-                  const currentStock = item.stockQuantity || 0;
-                  const totalStock = currentStock + (quantityToAdd || 0);
-
-                  return (
-                    <Paper
-                      key={item.productVariantId}
-                      variant="outlined"
-                      sx={{
-                        p: 2,
-                        borderRadius: 2,
-                        bgcolor: 'background.paper',
-                      }}
-                    >
-                      <Grid container spacing={2} alignItems="center">
-                        <Grid size={{ xs: 12, sm: 5 }}>
-                          <Stack spacing={0.5}>
-                            <Typography variant="subtitle2" fontWeight={700}>
+              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, maxHeight: 340, overflowY: 'auto' }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'background.neutral' } }}>
+                      <TableCell>Id</TableCell>
+                      <TableCell>Descripción</TableCell>
+                      <TableCell>Talla</TableCell>
+                      <TableCell>Color</TableCell>
+                      <TableCell align="right">Cantidad actual</TableCell>
+                      <TableCell align="center" sx={{ width: 140 }}>Cantidad a ingresar</TableCell>
+                      <TableCell align="center" sx={{ width: 50 }}></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {intakeItems.map(({ item, quantityToAdd }) => {
+                      const productIdVal = item.productId || item.productVariantId || item.id;
+                      return (
+                        <TableRow key={item.productVariantId || item.id} hover>
+                          <TableCell sx={{ fontWeight: 600 }}>{productIdVal}</TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={600}>
                               {item.description}
                             </Typography>
-
-                            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 0.5 }}>
-                              {item.sku && <Chip label={`SKU: ${item.sku}`} size="small" variant="outlined" />}
-                              {item.size && item.size !== 'N/A' && (
-                                <Chip label={`Talla: ${item.size}`} size="small" variant="outlined" />
-                              )}
-                              {item.color && item.color !== 'N/A' && (
-                                <Chip label={`Color: ${item.color}`} size="small" variant="outlined" />
-                              )}
-                            </Stack>
-
-                            <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                              Stock actual: {currentStock} unidades
-                            </Typography>
-                          </Stack>
-                        </Grid>
-
-                        <Grid size={{ xs: 6, sm: 3 }}>
-                          <TextField
-                            type="number"
-                            label="Cantidad a ingresar"
-                            size="small"
-                            fullWidth
-                            value={quantityToAdd}
-                            onChange={(e) => handleQuantityChange(item.productVariantId, e.target.value)}
-                            slotProps={{
-                              htmlInput: {
-                                min: 1,
-                              },
-                            }}
-                          />
-                        </Grid>
-
-                        {/* Calculation Total = current + (insertedValue) */}
-                        <Grid size={{ xs: 5, sm: 3 }} sx={{ textAlign: 'right' }}>
-                          <Box
-                            sx={{
-                              p: 1,
-                              borderRadius: 1.5,
-                              bgcolor: 'success.alpha12',
-                              border: '1px solid var(--mui-palette-success-main)',
-                              display: 'inline-block',
-                              width: '100%',
-                            }}
-                          >
-                            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block' }}>
-                              Total (Actual + Ingreso)
-                            </Typography>
-                            <Typography variant="subtitle1" fontWeight={800} color="success.main">
-                              {totalStock} unid.
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                              ({currentStock} + {quantityToAdd})
-                            </Typography>
-                          </Box>
-                        </Grid>
-
-                        <Grid size={{ xs: 1, sm: 1 }} sx={{ textAlign: 'right' }}>
-                          <IconButton
-                            color="error"
-                            size="small"
-                            onClick={() => handleRemoveProduct(item.productVariantId)}
-                            title="Eliminar producto"
-                          >
-                            <TrashIcon size={20} />
-                          </IconButton>
-                        </Grid>
-                      </Grid>
-                    </Paper>
-                  );
-                })}
-              </Stack>
+                            {item.sku && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                SKU: {item.sku}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>{item.size && item.size !== 'N/A' ? item.size : 'N/A'}</TableCell>
+                          <TableCell>{item.color && item.color !== 'N/A' ? item.color : 'N/A'}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600 }}>
+                            {item.stockQuantity || 0}
+                          </TableCell>
+                          <TableCell align="center">
+                            <TextField
+                              type="number"
+                              size="small"
+                              value={quantityToAdd}
+                              onChange={(e) => handleQuantityChange(item.productVariantId, e.target.value)}
+                              slotProps={{
+                                htmlInput: {
+                                  min: 1,
+                                  style: { textAlign: 'center', fontWeight: 700 },
+                                },
+                              }}
+                              sx={{ width: 100 }}
+                            />
+                          </TableCell>
+                          <TableCell align="center">
+                            <IconButton
+                              color="error"
+                              size="small"
+                              onClick={() => handleRemoveProduct(item.productVariantId)}
+                              title="Eliminar producto"
+                            >
+                              <CloseIcon size={18} />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             )}
           </Box>
 
@@ -511,9 +707,37 @@ export function StockIntakeDialog({
       <Divider />
 
       <DialogActions sx={{ p: 2.5, justifyContent: 'space-between' }}>
-        <Button variant="outlined" color="inherit" onClick={onClose} disabled={submitting}>
-          Cancelar
-        </Button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept=".xlsx, .xls"
+          style={{ display: 'none' }}
+          onChange={handleImportFormat}
+        />
+
+        <Stack direction="row" spacing={1.5}>
+          <Button variant="outlined" color="inherit" onClick={onClose} disabled={submitting}>
+            Cancelar
+          </Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={handleGenerateFormat}
+            startIcon={<FileArrowDownIcon size={18} />}
+            sx={{ borderRadius: 2, fontWeight: 700 }}
+          >
+            Generar formato (.xlsx)
+          </Button>
+          <Button
+            variant="outlined"
+            color="info"
+            onClick={handleImportButtonClick}
+            startIcon={<FileArrowUpIcon size={18} />}
+            sx={{ borderRadius: 2, fontWeight: 700 }}
+          >
+            Importar formato
+          </Button>
+        </Stack>
 
         <Button
           variant="contained"
@@ -526,6 +750,17 @@ export function StockIntakeDialog({
           {submitting ? 'Guardando...' : 'Agregar a inventario'}
         </Button>
       </DialogActions>
+
+      {/* Report Summary Modal */}
+      <StockIntakeReportDialog
+        open={showReportModal}
+        report={generatedReport}
+        onClose={() => {
+          setShowReportModal(false);
+          setGeneratedReport(null);
+          onClose();
+        }}
+      />
     </Dialog>
   );
 }

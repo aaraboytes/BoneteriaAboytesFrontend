@@ -30,6 +30,7 @@ export interface VacationRequest {
 export interface StaffRecord {
     id: number;
     fullName: string;
+    username?: string;
     email: string;
     role: string;
     specialty: string;

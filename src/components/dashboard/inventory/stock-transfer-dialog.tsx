@@ -25,6 +25,12 @@ import {
   TextField,
   Typography,
   Chip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   createFilterOptions,
 } from '@mui/material';
 
@@ -40,9 +46,14 @@ import {
   Package as PackageIcon,
   CheckCircle as CheckIcon,
   MagnifyingGlass as SearchIcon,
+  FileArrowDown as FileArrowDownIcon,
+  FileArrowUp as FileArrowUpIcon,
 } from '@phosphor-icons/react';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import apiClient from '@/lib/api-client';
 import { InventoryItem } from './inventory-table';
+import { StockTransferReportDialog, TransferReportData } from './stock-transfer-report-dialog';
 
 export interface StoreSimple {
   id: number;
@@ -79,6 +90,9 @@ export function StockTransferDialog({
   const [searchInputValue, setSearchInputValue] = React.useState<string>('');
   const [submitting, setSubmitting] = React.useState<boolean>(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [generatedReport, setGeneratedReport] = React.useState<TransferReportData | null>(null);
+  const [showReportModal, setShowReportModal] = React.useState<boolean>(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Synchronize initial store selections when dialog opens or stores change
   React.useEffect(() => {
@@ -243,24 +257,215 @@ export function StockTransferDialog({
       const payload = {
         fromStoreId,
         toStoreId,
+        userName: 'Administrador',
         items: transferItems.map((ti) => ({
           productVariantId: ti.item.productVariantId,
           quantity: ti.quantity,
         })),
       };
 
-      await apiClient.post('/Inventory/transfer', payload);
+      const res = await apiClient.post('/Inventory/transfer', payload);
 
       const msg = `Se transfirieron exitosamente ${transferItems.reduce((acc, i) => acc + i.quantity, 0)} unidades de ${fromStoreObj?.name || 'Origen'} a ${toStoreObj?.name || 'Destino'}.`;
-      
       onSuccess(msg);
-      onClose();
+
+      if (res.data && res.data.report) {
+        setGeneratedReport(res.data.report);
+        setShowReportModal(true);
+      } else {
+        onClose();
+      }
     } catch (err: any) {
       console.error('Transfer failed:', err);
       const serverMsg = err?.response?.data?.message || err?.message || 'Ocurrió un error al procesar la transferencia.';
       setErrorMessage(serverMsg);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleGenerateFormat = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Transferencia de Inventario');
+
+      worksheet.columns = [
+        { header: 'ID Producto', key: 'productId', width: 18 },
+        { header: 'SKU', key: 'sku', width: 18 },
+        { header: 'Descripción', key: 'description', width: 45 },
+        { header: 'Modelo', key: 'model', width: 18 },
+        { header: 'Talla', key: 'size', width: 14 },
+        { header: 'Color', key: 'color', width: 14 },
+        { header: 'Stock Disponible', key: 'availableStock', width: 18 },
+        { header: 'Cantidad a Enviar', key: 'cantidad', width: 18 },
+      ];
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFF' }, size: 11 };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '15B79E' },
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 24;
+
+      const targetItems =
+        transferItems.length > 0
+          ? transferItems.map((i) => ({ item: i.item, qty: i.quantity || 0 }))
+          : fromInventory.map((i) => ({ item: i, qty: 0 }));
+
+      targetItems.forEach(({ item, qty }) => {
+        const avail = Math.max(0, item.stockQuantity || 0);
+        const row = worksheet.addRow({
+          productId: item.productId || item.productVariantId || item.id,
+          sku: item.sku || 'N/A',
+          description: item.description || 'Sin Descripción',
+          model: item.model || 'N/A',
+          size: item.size || 'N/A',
+          color: item.color || 'N/A',
+          availableStock: avail,
+          cantidad: qty || 0,
+        });
+
+        row.getCell('availableStock').alignment = { horizontal: 'right' };
+        row.getCell('cantidad').alignment = { horizontal: 'right' };
+        row.getCell('cantidad').font = { bold: true };
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+
+      const fromStoreObj = stores.find((s) => s.id === fromStoreId);
+      const toStoreObj = stores.find((s) => s.id === toStoreId);
+      const fromName = fromStoreObj ? fromStoreObj.name.replace(/[^a-zA-Z0-9_-]/g, '_') : `Sucursal_${fromStoreId}`;
+      const toName = toStoreObj ? toStoreObj.name.replace(/[^a-zA-Z0-9_-]/g, '_') : `Sucursal_${toStoreId}`;
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      saveAs(blob, `Formato_Transferencia_${fromName}_a_${toName}_${dateStr}.xlsx`);
+    } catch (err) {
+      console.error('Failed to generate XLSX transfer format:', err);
+    }
+  };
+
+  const handleImportButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFormat = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
+
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        setErrorMessage('El archivo Excel no contiene ninguna hoja de trabajo válida.');
+        return;
+      }
+
+      let idColIdx = -1;
+      let qtyColIdx = -1;
+      let skuColIdx = -1;
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        const val = String(cell.value || '').trim().toLowerCase();
+        if (val.includes('id producto') || val === 'id' || val.includes('productid') || val.includes('id_producto')) {
+          idColIdx = colNumber;
+        } else if (val.includes('sku')) {
+          skuColIdx = colNumber;
+        } else if (val.includes('cantidad') || val.includes('enviar') || val.includes('amount') || val.includes('cant')) {
+          qtyColIdx = colNumber;
+        }
+      });
+
+      if (idColIdx === -1 && skuColIdx === -1) {
+        setErrorMessage('No se encontró la columna "ID Producto" o "SKU" en el archivo Excel.');
+        return;
+      }
+
+      if (qtyColIdx === -1) {
+        setErrorMessage('No se encontró la columna "Cantidad a Enviar" en el archivo Excel.');
+        return;
+      }
+
+      const inventoryByIdMap = new Map<string, InventoryItem>();
+      fromInventory.forEach((item) => {
+        if (item.productId !== undefined && item.productId !== null) inventoryByIdMap.set(String(item.productId).trim(), item);
+        if (item.productVariantId !== undefined && item.productVariantId !== null) inventoryByIdMap.set(String(item.productVariantId).trim(), item);
+        if (item.id !== undefined && item.id !== null) inventoryByIdMap.set(String(item.id).trim(), item);
+        if (item.sku) inventoryByIdMap.set(String(item.sku).trim().toLowerCase(), item);
+      });
+
+      const newTransferItemsMap = new Map<string | number, SelectedTransferItem>();
+      transferItems.forEach((existing) => {
+        newTransferItemsMap.set(existing.item.productVariantId || existing.item.id, existing);
+      });
+
+      let importedCount = 0;
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+
+        const rawIdVal = idColIdx !== -1 ? row.getCell(idColIdx).value : null;
+        const rawSkuVal = skuColIdx !== -1 ? row.getCell(skuColIdx).value : null;
+        const rawQtyVal = row.getCell(qtyColIdx).value;
+
+        let qtyNum = 0;
+        if (typeof rawQtyVal === 'number') {
+          qtyNum = rawQtyVal;
+        } else if (typeof rawQtyVal === 'object' && rawQtyVal !== null && 'result' in rawQtyVal) {
+          qtyNum = Number((rawQtyVal as any).result) || 0;
+        } else if (typeof rawQtyVal === 'string') {
+          qtyNum = parseFloat(rawQtyVal.trim()) || 0;
+        }
+
+        if (qtyNum <= 0) return;
+
+        let matchedItem: InventoryItem | undefined;
+
+        if (rawIdVal !== null && rawIdVal !== undefined) {
+          const idStr = String(typeof rawIdVal === 'object' && 'result' in rawIdVal ? (rawIdVal as any).result : rawIdVal).trim();
+          matchedItem = inventoryByIdMap.get(idStr) || inventoryByIdMap.get(idStr.replace('.0', ''));
+        }
+
+        if (!matchedItem && rawSkuVal !== null && rawSkuVal !== undefined) {
+          const skuStr = String(typeof rawSkuVal === 'object' && 'result' in rawSkuVal ? (rawSkuVal as any).result : rawSkuVal).trim().toLowerCase();
+          matchedItem = inventoryByIdMap.get(skuStr);
+        }
+
+        if (matchedItem) {
+          const availableStock = Math.max(0, matchedItem.stockQuantity || 0);
+          const validQty = Math.min(qtyNum, availableStock);
+          const key = matchedItem.productVariantId || matchedItem.id;
+
+          newTransferItemsMap.set(key, {
+            item: matchedItem,
+            quantity: validQty,
+          });
+          importedCount++;
+        }
+      });
+
+      const updatedList = Array.from(newTransferItemsMap.values());
+      setTransferItems(updatedList);
+
+      if (importedCount > 0) {
+        setErrorMessage(null);
+      } else {
+        setErrorMessage('No se encontraron productos coincidentes en la sucursal de origen con cantidad a enviar > 0.');
+      }
+    } catch (err) {
+      console.error('Failed to import transfer XLSX format:', err);
+      setErrorMessage('Error al importar el archivo Excel. Revisa el formato del archivo.');
+    } finally {
+      event.target.value = '';
     }
   };
 
@@ -468,11 +673,31 @@ export function StockTransferDialog({
               <Typography variant="subtitle2" fontWeight={700}>
                 Productos a Transferir ({transferItems.length})
               </Typography>
-              {transferItems.length > 0 && (
-                <Button size="small" color="secondary" onClick={() => setTransferItems([])}>
-                  Limpiar Lista
+              <Stack direction="row" spacing={1}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  onClick={handleGenerateFormat}
+                  startIcon={<FileArrowDownIcon size={18} />}
+                >
+                  Generar formato (.xlsx)
                 </Button>
-              )}
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="info"
+                  onClick={handleImportButtonClick}
+                  startIcon={<FileArrowUpIcon size={18} />}
+                >
+                  Importar formato
+                </Button>
+                {transferItems.length > 0 && (
+                  <Button size="small" color="secondary" onClick={() => setTransferItems([])}>
+                    Limpiar Lista
+                  </Button>
+                )}
+              </Stack>
             </Stack>
 
             {transferItems.length === 0 ? (
@@ -497,91 +722,98 @@ export function StockTransferDialog({
                 </Stack>
               </Paper>
             ) : (
-              <Stack spacing={1.5} sx={{ maxHeight: 320, overflowY: 'auto', pr: 0.5 }}>
-                {transferItems.map(({ item, quantity }) => {
-                  const availableStock = Math.max(0, item.stockQuantity);
-                  const isInvalidQty = quantity <= 0 || quantity > availableStock;
+              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, maxHeight: 340, overflowY: 'auto' }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'background.neutral' } }}>
+                      <TableCell>ID</TableCell>
+                      <TableCell>Descripción</TableCell>
+                      <TableCell>Modelo</TableCell>
+                      <TableCell>Talla</TableCell>
+                      <TableCell>Color</TableCell>
+                      <TableCell align="right">Cantidad actual</TableCell>
+                      <TableCell align="center" sx={{ width: 140 }}>Cantidad a enviar</TableCell>
+                      <TableCell align="center" sx={{ width: 50 }}></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {transferItems.map(({ item, quantity }) => {
+                      const initialStock = Math.max(0, item.stockQuantity || 0);
+                      const qtyToSend = quantity > 0 ? quantity : 0;
+                      const remainingStock = initialStock - qtyToSend;
+                      const isInvalidQty = quantity <= 0 || quantity > initialStock;
+                      const productIdVal = item.productId || item.productVariantId || item.id;
 
-                  return (
-                    <Paper
-                      key={item.productVariantId}
-                      variant="outlined"
-                      sx={{
-                        p: 2,
-                        borderRadius: 2,
-                        bgcolor: 'background.paper',
-                        borderColor: isInvalidQty ? 'error.main' : 'divider',
-                      }}
-                    >
-                      <Grid container spacing={2} alignItems="center">
-                        <Grid size={{ xs: 12, sm: 7 }}>
-                          <Stack spacing={0.5}>
-                            <Typography variant="subtitle2" fontWeight={700}>
+                      return (
+                        <TableRow key={item.productVariantId || item.id} hover sx={{ bgcolor: isInvalidQty ? 'error.alpha8' : undefined }}>
+                          <TableCell sx={{ fontWeight: 600 }}>{productIdVal}</TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={600}>
                               {item.description}
                             </Typography>
-
-                            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 0.5 }}>
-                              {item.sku && <Chip label={`SKU: ${item.sku}`} size="small" variant="outlined" />}
-                              {item.size && item.size !== 'N/A' && (
-                                <Chip label={`Talla: ${item.size}`} size="small" variant="outlined" />
-                              )}
-                              {item.color && item.color !== 'N/A' && (
-                                <Chip label={`Color: ${item.color}`} size="small" variant="outlined" />
-                              )}
-                            </Stack>
-
-                            {/* Required Stock info below product name */}
+                            {item.sku && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                SKU: {item.sku}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>{item.model && item.model !== 'N/A' ? item.model : 'N/A'}</TableCell>
+                          <TableCell>{item.size && item.size !== 'N/A' ? item.size : 'N/A'}</TableCell>
+                          <TableCell>{item.color && item.color !== 'N/A' ? item.color : 'N/A'}</TableCell>
+                          <TableCell align="right">
                             <Typography
-                              variant="caption"
-                              fontWeight={600}
-                              color={availableStock <= 0 ? 'error.main' : 'primary.main'}
-                              sx={{ mt: 0.5, display: 'inline-block' }}
+                              variant="body2"
+                              fontWeight={700}
+                              color={remainingStock < 0 ? 'error.main' : remainingStock === 0 ? 'warning.main' : 'primary.main'}
                             >
-                              Stock disponible en Ubicación A: {availableStock} unidades
+                              {remainingStock}
                             </Typography>
-                          </Stack>
-                        </Grid>
-
-                        <Grid size={{ xs: 9, sm: 4 }}>
-                          <TextField
-                            type="number"
-                            label="Cantidad a enviar"
-                            size="small"
-                            fullWidth
-                            value={quantity}
-                            onChange={(e) => handleQuantityChange(item.productVariantId, e.target.value)}
-                            slotProps={{
-                              htmlInput: {
-                                min: 1,
-                                max: availableStock,
-                              },
-                            }}
-                            error={isInvalidQty}
-                            helperText={
-                              quantity > availableStock
-                                ? `Máximo ${availableStock} unidades`
-                                : quantity <= 0
-                                ? 'Debe ser al menos 1'
-                                : ''
-                            }
-                          />
-                        </Grid>
-
-                        <Grid size={{ xs: 3, sm: 1 }} sx={{ textAlign: 'right' }}>
-                          <IconButton
-                            color="error"
-                            size="small"
-                            onClick={() => handleRemoveProduct(item.productVariantId)}
-                            title="Eliminar producto"
-                          >
-                            <TrashIcon size={20} />
-                          </IconButton>
-                        </Grid>
-                      </Grid>
-                    </Paper>
-                  );
-                })}
-              </Stack>
+                            {qtyToSend > 0 && (
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', display: 'block' }}>
+                                ({initialStock} - {qtyToSend})
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align="center">
+                            <TextField
+                              type="number"
+                              size="small"
+                              value={quantity}
+                              onChange={(e) => handleQuantityChange(item.productVariantId, e.target.value)}
+                              slotProps={{
+                                htmlInput: {
+                                  min: 1,
+                                  max: initialStock,
+                                  style: { textAlign: 'center', fontWeight: 700 },
+                                },
+                              }}
+                              error={isInvalidQty}
+                              helperText={
+                                quantity > initialStock
+                                  ? `Máx ${initialStock}`
+                                  : quantity <= 0
+                                  ? 'Mín 1'
+                                  : ''
+                              }
+                              sx={{ width: 100 }}
+                            />
+                          </TableCell>
+                          <TableCell align="center">
+                            <IconButton
+                              color="error"
+                              size="small"
+                              onClick={() => handleRemoveProduct(item.productVariantId)}
+                              title="Eliminar producto"
+                            >
+                              <CloseIcon size={18} />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             )}
           </Box>
 
@@ -596,9 +828,37 @@ export function StockTransferDialog({
       <Divider />
 
       <DialogActions sx={{ p: 2.5, justifyContent: 'space-between' }}>
-        <Button variant="outlined" color="inherit" onClick={onClose} disabled={submitting}>
-          Cancelar
-        </Button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept=".xlsx, .xls"
+          style={{ display: 'none' }}
+          onChange={handleImportFormat}
+        />
+
+        <Stack direction="row" spacing={1.5}>
+          <Button variant="outlined" color="inherit" onClick={onClose} disabled={submitting}>
+            Cancelar
+          </Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={handleGenerateFormat}
+            startIcon={<FileArrowDownIcon size={18} />}
+            sx={{ borderRadius: 2, fontWeight: 700 }}
+          >
+            Generar formato (.xlsx)
+          </Button>
+          <Button
+            variant="outlined"
+            color="info"
+            onClick={handleImportButtonClick}
+            startIcon={<FileArrowUpIcon size={18} />}
+            sx={{ borderRadius: 2, fontWeight: 700 }}
+          >
+            Importar formato
+          </Button>
+        </Stack>
 
         <Button
           variant="contained"
@@ -606,11 +866,22 @@ export function StockTransferDialog({
           onClick={handleSendTransfer}
           disabled={!isFormValid || submitting}
           startIcon={submitting ? <CircularProgress size={18} color="inherit" /> : <CheckIcon size={20} />}
-          sx={{ borderRadius: 2, px: 3 }}
+          sx={{ borderRadius: 2, px: 3, fontWeight: 700 }}
         >
           {submitting ? 'Enviando...' : 'Enviar'}
         </Button>
       </DialogActions>
+
+      {/* Transfer Summary Report Modal */}
+      <StockTransferReportDialog
+        open={showReportModal}
+        report={generatedReport}
+        onClose={() => {
+          setShowReportModal(false);
+          setGeneratedReport(null);
+          onClose();
+        }}
+      />
     </Dialog>
   );
 }

@@ -8,6 +8,7 @@ export const paths = {
     stores: '/dashboard/stores',
     storeMap: (id: string | number) => `/dashboard/stores/${id}/map`,
     products: '/dashboard/products',
+    suppliers: '/dashboard/suppliers',
     services: '/dashboard/services',
     customers: '/dashboard/customers',
     staff: '/dashboard/staff',

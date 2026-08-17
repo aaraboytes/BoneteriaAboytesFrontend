@@ -37,8 +37,8 @@ class AuthClient {
     const { email, password } = params;
 
     try {
-      const response = await apiClient.post('Auth/login', { email, password });
-      const { token } = response.data; // The backend returns { User, Token }
+      const response = await apiClient.post('Auth/login', { username: email, email, password });
+      const { token } = response.data; // The backend returns { user, token }
 
       try {
         localStorage.setItem('custom-auth-token', token);
@@ -59,17 +59,18 @@ class AuthClient {
     return { error: 'Password reset not implemented' };
   }
 
-  async updatePassword(_: ResetPasswordParams): Promise<{ error?: string }> {
-    return { error: 'Update reset not implemented' };
+  async signOut(): Promise<{ error?: string }> {
+    try {
+      localStorage.removeItem('custom-auth-token');
+    } catch (err) {
+      console.error('Failed to remove token from localStorage', err);
+    }
+
+    return {};
   }
 
   async getUser(): Promise<{ data?: User | null; error?: string }> {
-    let token = null;
-    try {
-      token = localStorage.getItem('custom-auth-token');
-    } catch (err) {
-      console.error('Failed to get token from localStorage', err);
-    }
+    const token = localStorage.getItem('custom-auth-token');
 
     if (!token) {
       return { data: null };
@@ -79,26 +80,9 @@ class AuthClient {
       const response = await apiClient.get('Auth/me');
       return { data: response.data };
     } catch (error: unknown) {
-      if ((error as AxiosError).response && (error as AxiosError).response?.status === 401) {
-        try {
-          localStorage.removeItem('custom-auth-token');
-        } catch (err) {
-          console.error('Failed to remove token from localStorage', err);
-        }
-        return { data: null };
-      }
-      console.error('Auth User Error:', error);
-      return { data: null, error: 'Failed to fetch user' };
+      console.error('Failed to fetch user in AuthClient:', error);
+      return { data: null };
     }
-  }
-
-  async signOut(): Promise<{ error?: string }> {
-    try {
-      localStorage.removeItem('custom-auth-token');
-    } catch (err) {
-      console.error('Failed to remove token from localStorage', err);
-    }
-    return {};
   }
 }
 

@@ -43,7 +43,7 @@ export function MobileNav({ open, onClose }: MobileNavProps): React.JSX.Element 
 
     if (item.key === 'overview') {
       const roleLower = user?.role?.toLowerCase();
-      return roleLower === 'admin' || roleLower === 'developer';
+      return roleLower === 'admin' || roleLower === 'administrador' || roleLower === 'developer' || roleLower === 'desarrollador' || roleLower === 'jefe' || roleLower === 'gerente';
     }
     return true;
   });

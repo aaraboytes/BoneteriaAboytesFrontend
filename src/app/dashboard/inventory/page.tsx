@@ -73,6 +73,7 @@ export default function InventoryPage(): React.JSX.Element {
             provider: p.supplier?.name || 'Sin Proveedor',
             department: p.department?.name || 'General',
             genre: p.genre?.name || 'N/A',
+            model: p.model?.name || 'N/A',
             size: v?.size?.name || 'N/A',
             color: v?.color?.name || 'N/A',
             price: p.price,

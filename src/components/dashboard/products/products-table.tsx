@@ -53,6 +53,7 @@ export interface Product {
   supplier?: { id: number; name: string } | string | null;
   provider?: string;
   genre?: { id: number; name: string } | string | null;
+  model?: { id: number; name: string } | string | null;
   size?: string;
   color?: string;
   sku?: string;
@@ -80,6 +81,14 @@ function getGenre(p: Product): string {
   if (p.genre) {
     if (typeof p.genre === 'object' && p.genre.name) return p.genre.name;
     if (typeof p.genre === 'string') return p.genre;
+  }
+  return 'N/A';
+}
+
+function getModel(p: Product): string {
+  if (p.model) {
+    if (typeof p.model === 'object' && p.model.name) return p.model.name;
+    if (typeof p.model === 'string') return p.model;
   }
   return 'N/A';
 }
@@ -163,6 +172,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
   // Column Filters state
   const [providerFilter, setProviderFilter] = React.useState<string | null>(null);
   const [genreFilter, setGenreFilter] = React.useState<string | null>(null);
+  const [modelFilter, setModelFilter] = React.useState<string | null>(null);
   const [sizeFilter, setSizeFilter] = React.useState<string | null>(null);
   const [colorFilter, setColorFilter] = React.useState<string | null>(null);
   const [stockStatusFilter, setStockStatusFilter] = React.useState<string | null>(null);
@@ -186,6 +196,15 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
     products.forEach((p) => {
       const g = getGenre(p);
       if (g && g !== 'N/A') set.add(g);
+    });
+    return Array.from(set).sort();
+  }, [products]);
+
+  const modelOptions = React.useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      const m = getModel(p);
+      if (m && m !== 'N/A') set.add(m);
     });
     return Array.from(set).sort();
   }, [products]);
@@ -216,6 +235,8 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
       if (name) set.add(name);
       const prov = getProvider(p);
       if (prov && prov !== 'Sin Proveedor') set.add(prov);
+      const mod = getModel(p);
+      if (mod && mod !== 'N/A') set.add(mod);
       getSkus(p).forEach((s) => set.add(s));
       getBarcodes(p).forEach((b) => set.add(b));
       getColors(p).forEach((c) => set.add(c));
@@ -232,6 +253,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
         const q = globalSearch.toLowerCase().trim();
         const name = (p.name || p.description || '').toLowerCase();
         const prov = getProvider(p).toLowerCase();
+        const mod = getModel(p).toLowerCase();
         const skus = getSkus(p).map((s) => s.toLowerCase());
         const barcodes = getBarcodes(p).map((b) => b.toLowerCase());
         const colors = getColors(p).map((c) => c.toLowerCase());
@@ -239,12 +261,13 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
 
         const matchesName = name.includes(q);
         const matchesProv = prov.includes(q);
+        const matchesMod = mod.includes(q);
         const matchesSku = skus.some((s) => s.includes(q));
         const matchesBarcode = barcodes.some((b) => b.includes(q));
         const matchesColor = colors.some((c) => c.includes(q));
         const matchesSize = sizes.some((s) => s.includes(q));
 
-        if (!matchesName && !matchesProv && !matchesSku && !matchesBarcode && !matchesColor && !matchesSize) {
+        if (!matchesName && !matchesProv && !matchesMod && !matchesSku && !matchesBarcode && !matchesColor && !matchesSize) {
           return false;
         }
       }
@@ -259,17 +282,22 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
         if (getGenre(p) !== genreFilter) return false;
       }
 
-      // 4. Size Filter
+      // 4. Model Filter
+      if (modelFilter) {
+        if (getModel(p) !== modelFilter) return false;
+      }
+
+      // 5. Size Filter
       if (sizeFilter) {
         if (!getSizes(p).includes(sizeFilter)) return false;
       }
 
-      // 5. Color Filter
+      // 6. Color Filter
       if (colorFilter) {
         if (!getColors(p).includes(colorFilter)) return false;
       }
 
-      // 6. Stock Status Filter
+      // 7. Stock Status Filter
       if (stockStatusFilter) {
         const stock = getStock(p);
         if (stockStatusFilter === 'En Existencia (>0)' && stock <= 0) return false;
@@ -279,7 +307,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
 
       return true;
     });
-  }, [products, globalSearch, providerFilter, genreFilter, sizeFilter, colorFilter, stockStatusFilter]);
+  }, [products, globalSearch, providerFilter, genreFilter, modelFilter, sizeFilter, colorFilter, stockStatusFilter]);
 
   // Paginated slice
   const paginatedProducts = React.useMemo(() => {
@@ -290,6 +318,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
     setGlobalSearch('');
     setProviderFilter(null);
     setGenreFilter(null);
+    setModelFilter(null);
     setSizeFilter(null);
     setColorFilter(null);
     setStockStatusFilter(null);
@@ -300,6 +329,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
     globalSearch,
     providerFilter,
     genreFilter,
+    modelFilter,
     sizeFilter,
     colorFilter,
     stockStatusFilter,
@@ -409,8 +439,23 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                   />
                 </Grid>
 
-                {/* 3. Talla Autocomplete Filter */}
+                {/* 3. Modelo Autocomplete Filter */}
                 <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+                  <Autocomplete
+                    options={modelOptions}
+                    value={modelFilter}
+                    onChange={(_, val) => {
+                      setModelFilter(val);
+                      setPage(0);
+                    }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Modelo" size="small" placeholder="Todos" variant="outlined" />
+                    )}
+                  />
+                </Grid>
+
+                {/* 4. Talla Autocomplete Filter */}
+                <Grid size={{ xs: 12, sm: 6, md: 1.8 }}>
                   <Autocomplete
                     options={sizeOptions}
                     value={sizeFilter}
@@ -424,8 +469,8 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                   />
                 </Grid>
 
-                {/* 4. Color Autocomplete Filter */}
-                <Grid size={{ xs: 12, sm: 6, md: 2.6 }}>
+                {/* 5. Color Autocomplete Filter */}
+                <Grid size={{ xs: 12, sm: 6, md: 1.8 }}>
                   <Autocomplete
                     options={colorOptions}
                     value={colorFilter}
@@ -439,8 +484,8 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                   />
                 </Grid>
 
-                {/* 5. Stock Status Autocomplete Filter */}
-                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                {/* 6. Stock Status Autocomplete Filter */}
+                <Grid size={{ xs: 12, sm: 6, md: 2 }}>
                   <Autocomplete
                     options={stockStatusOptions}
                     value={stockStatusFilter}
@@ -480,6 +525,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                 const locations = product.mapLocation && Array.isArray(product.mapLocation) ? product.mapLocation : [];
                 const provider = getProvider(product);
                 const genre = getGenre(product);
+                const model = getModel(product);
                 const colors = getColors(product);
                 const sizes = getSizes(product);
                 const stock = getStock(product);
@@ -506,6 +552,9 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                             )}
                             {genre !== 'N/A' && (
                               <Chip label={genre} size="small" color="secondary" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+                            )}
+                            {model !== 'N/A' && (
+                              <Chip label={`Modelo: ${model}`} size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
                             )}
                           </Stack>
                         </Box>
