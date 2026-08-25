@@ -3,6 +3,7 @@
   "sections": {
     "overview": false,
     "sales": true,
+    "salesHistory": true,
     "returns": true,
     "roles": true,
     "inventory": true,
