@@ -138,16 +138,24 @@ export function PosSalesWorkspace(): React.JSX.Element {
     setError(null);
     setSubmitting(true);
     try {
+      // Each line only asks for the amount received via that method. The amount actually
+      // applied toward the sale is whatever is still owed when that line is reached (in the
+      // order entered); anything beyond that is change. This is only an estimate against the
+      // pre-tax subtotal - the real total (with tax/discount) isn't known until the backend
+      // responds, so the receipt dialog recomputes the change shown to the customer from the
+      // actual returned total rather than trusting this estimate.
+      let remainingDue = subtotal;
       const paymentsPayload = payments
-        .filter((p) => p.paymentMethodId !== '' && (parseFloat(p.amount) || 0) > 0)
+        .filter((p) => p.paymentMethodId !== '' && (parseFloat(p.receivedAmount) || 0) > 0)
         .map((p) => {
-          const amount = parseFloat(p.amount) || 0;
           const received = parseFloat(p.receivedAmount) || 0;
+          const amount = Math.min(received, Math.max(0, remainingDue));
           const changeGiven = received > amount ? received - amount : undefined;
+          remainingDue -= amount;
           return {
             paymentMethodId: p.paymentMethodId as number,
             amount,
-            receivedAmount: received > 0 ? received : undefined,
+            receivedAmount: received,
             changeGiven,
           };
         });
@@ -169,8 +177,10 @@ export function PosSalesWorkspace(): React.JSX.Element {
       const sale = res.data;
 
       const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
-      const totalReceived = paymentsPayload.reduce((sum, p) => sum + (p.receivedAmount ?? p.amount), 0);
-      const totalChange = paymentsPayload.reduce((sum, p) => sum + (p.changeGiven ?? 0), 0);
+      const totalReceived = paymentsPayload.reduce((sum, p) => sum + p.receivedAmount, 0);
+      // Recomputed from the backend's actual total (tax/discount included) rather than the
+      // pre-submission subtotal estimate used to split the payment lines above.
+      const totalChange = Math.max(0, totalReceived - sale.total);
 
       setCompletedSale({
         id: sale.id,
@@ -273,7 +283,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
 
                   <Divider />
 
-                  <PaymentMethodsPanel methods={paymentMethods} payments={payments} onChange={setPayments} />
+                  <PaymentMethodsPanel methods={paymentMethods} payments={payments} onChange={setPayments} amountDue={subtotal} />
 
                   <Divider />
 
