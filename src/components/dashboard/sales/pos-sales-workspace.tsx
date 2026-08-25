@@ -12,13 +12,13 @@ import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
-import Snackbar from '@mui/material/Snackbar';
 import apiClient from '@/lib/api-client';
 import { useUser } from '@/hooks/use-user';
 
 import { ProductSearchField, type VariantOption } from './product-search-field';
 import { CartTable, type CartLine } from './cart-table';
 import { PaymentMethodsPanel, type PaymentMethodOption, type PaymentLine } from './payment-methods-panel';
+import { SaleReceiptDialog, type CompletedSale } from './sale-receipt-dialog';
 
 interface StoreOption {
   id: number;
@@ -27,6 +27,7 @@ interface StoreOption {
 
 interface SaleResult {
   id: number;
+  date: string;
   subtotal: number;
   taxTotal: number;
   discountTotal: number;
@@ -46,7 +47,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
   const [payments, setPayments] = React.useState<PaymentLine[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [toast, setToast] = React.useState<{ open: boolean; message: string }>({ open: false, message: '' });
+  const [completedSale, setCompletedSale] = React.useState<CompletedSale | null>(null);
 
   React.useEffect(() => {
     (async () => {
@@ -137,6 +138,20 @@ export function PosSalesWorkspace(): React.JSX.Element {
     setError(null);
     setSubmitting(true);
     try {
+      const paymentsPayload = payments
+        .filter((p) => p.paymentMethodId !== '' && (parseFloat(p.amount) || 0) > 0)
+        .map((p) => {
+          const amount = parseFloat(p.amount) || 0;
+          const received = parseFloat(p.receivedAmount) || 0;
+          const changeGiven = received > amount ? received - amount : undefined;
+          return {
+            paymentMethodId: p.paymentMethodId as number,
+            amount,
+            receivedAmount: received > 0 ? received : undefined,
+            changeGiven,
+          };
+        });
+
       const payload = {
         storeId,
         customerId: customerId ? Number(customerId) : undefined,
@@ -147,16 +162,38 @@ export function PosSalesWorkspace(): React.JSX.Element {
           quantity: line.quantity,
           unitPrice: line.unitPrice,
         })),
-        payments: payments
-          .filter((p) => p.paymentMethodId !== '' && (parseFloat(p.amount) || 0) > 0)
-          .map((p) => ({ paymentMethodId: p.paymentMethodId as number, amount: parseFloat(p.amount) || 0 })),
+        payments: paymentsPayload,
       };
 
       const res = await apiClient.post<SaleResult>('/Sales', payload);
       const sale = res.data;
-      setToast({
-        open: true,
-        message: `Venta #${sale.id} completada. Total: $${sale.total.toFixed(2)}`,
+
+      const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
+      const totalReceived = paymentsPayload.reduce((sum, p) => sum + (p.receivedAmount ?? p.amount), 0);
+      const totalChange = paymentsPayload.reduce((sum, p) => sum + (p.changeGiven ?? 0), 0);
+
+      setCompletedSale({
+        id: sale.id,
+        date: sale.date,
+        storeName,
+        items: cart.map((line) => ({
+          description: line.description,
+          sku: line.sku,
+          unitPrice: line.unitPrice,
+          quantity: line.quantity,
+        })),
+        subtotal: sale.subtotal,
+        taxTotal: sale.taxTotal,
+        discountTotal: sale.discountTotal,
+        total: sale.total,
+        payments: paymentsPayload.map((p) => ({
+          methodName: paymentMethods.find((m) => m.id === p.paymentMethodId)?.name ?? 'Pago',
+          amount: p.amount,
+          receivedAmount: p.receivedAmount,
+          changeGiven: p.changeGiven,
+        })),
+        totalReceived,
+        totalChange,
       });
       resetForm();
     } catch (err: any) {
@@ -255,21 +292,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
         </Grid>
       </Stack>
 
-      <Snackbar
-        open={toast.open}
-        autoHideDuration={6000}
-        onClose={() => setToast((p) => ({ ...p, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert
-          onClose={() => setToast((p) => ({ ...p, open: false }))}
-          severity="success"
-          variant="filled"
-          sx={{ width: '100%', fontWeight: 700, borderRadius: 2 }}
-        >
-          {toast.message}
-        </Alert>
-      </Snackbar>
+      <SaleReceiptDialog open={completedSale !== null} sale={completedSale} onClose={() => setCompletedSale(null)} />
     </Box>
   );
 }
