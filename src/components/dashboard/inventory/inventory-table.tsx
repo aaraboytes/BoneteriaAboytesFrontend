@@ -54,6 +54,7 @@ import {
   Sparkle as SparkleIcon,
   ArrowsLeftRight as TransferIcon,
   Plus as PlusIcon,
+  Minus as MinusIcon,
   MapTrifold as MapIcon,
 } from '@phosphor-icons/react';
 
@@ -87,6 +88,7 @@ interface InventoryTableProps {
   onUpdateProduct?: (updatedItem: InventoryItem) => Promise<void>;
   onOpenTransfer?: () => void;
   onOpenIntake?: () => void;
+  onOpenWithdrawal?: () => void;
   onOpenMissing?: () => void;
 }
 
@@ -103,6 +105,7 @@ export function InventoryTable({
   onUpdateProduct,
   onOpenTransfer,
   onOpenIntake,
+  onOpenWithdrawal,
   onOpenMissing,
 }: InventoryTableProps): React.JSX.Element {
   // Store Map Dialog State
@@ -532,6 +535,19 @@ export function InventoryTable({
                   sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
                 >
                   Ingresar
+                </Button>
+              )}
+
+              {onOpenWithdrawal && (
+                <Button
+                  variant="contained"
+                  color="error"
+                  size="small"
+                  startIcon={<MinusIcon size={18} />}
+                  onClick={onOpenWithdrawal}
+                  sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
+                >
+                  Retirar
                 </Button>
               )}
 

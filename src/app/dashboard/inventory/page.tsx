@@ -6,6 +6,7 @@ import apiClient from '@/lib/api-client';
 import { InventoryTable, InventoryItem } from '@/components/dashboard/inventory/inventory-table';
 import { StockTransferDialog } from '@/components/dashboard/inventory/stock-transfer-dialog';
 import { StockIntakeDialog } from '@/components/dashboard/inventory/stock-intake-dialog';
+import { StockWithdrawalDialog } from '@/components/dashboard/inventory/stock-withdrawal-dialog';
 import { MissingProductsDialog } from '@/components/dashboard/inventory/missing-products-dialog';
 import {
   ArrowsClockwise as RefreshIcon,
@@ -30,6 +31,7 @@ export default function InventoryPage(): React.JSX.Element {
   // Dialog States
   const [transferDialogOpen, setTransferDialogOpen] = React.useState(false);
   const [intakeDialogOpen, setIntakeDialogOpen] = React.useState(false);
+  const [withdrawalDialogOpen, setWithdrawalDialogOpen] = React.useState(false);
   const [missingDialogOpen, setMissingDialogOpen] = React.useState(false);
 
   // Toast Notification State
@@ -209,6 +211,7 @@ export default function InventoryPage(): React.JSX.Element {
             onUpdateProduct={handleUpdateProduct}
             onOpenTransfer={() => setTransferDialogOpen(true)}
             onOpenIntake={() => setIntakeDialogOpen(true)}
+            onOpenWithdrawal={() => setWithdrawalDialogOpen(true)}
             onOpenMissing={() => setMissingDialogOpen(true)}
           />
         </Stack>
@@ -226,6 +229,15 @@ export default function InventoryPage(): React.JSX.Element {
       <StockIntakeDialog
         open={intakeDialogOpen}
         onClose={() => setIntakeDialogOpen(false)}
+        stores={stores}
+        currentStoreId={selectedStoreId}
+        onSuccess={handleSuccessAction}
+      />
+
+      {/* Stock Withdrawal Dialog */}
+      <StockWithdrawalDialog
+        open={withdrawalDialogOpen}
+        onClose={() => setWithdrawalDialogOpen(false)}
         stores={stores}
         currentStoreId={selectedStoreId}
         onSuccess={handleSuccessAction}
