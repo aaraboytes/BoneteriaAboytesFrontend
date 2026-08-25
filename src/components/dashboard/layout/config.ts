@@ -3,7 +3,9 @@ import { paths } from '@/paths';
 
 export const navItems = [
   { key: 'overview', title: 'Overview', href: paths.dashboard.overview, icon: 'chart-pie' },
-  { key: 'sales', title: 'Sales & Billing Desk', href: paths.dashboard.sales, icon: 'currency-dollar' },
+  { key: 'sales', title: 'Punto de Venta', href: paths.dashboard.sales, icon: 'currency-dollar' },
+  { key: 'returns', title: 'Devoluciones', href: paths.dashboard.returns, icon: 'arrow-counter-clockwise' },
+  { key: 'roles', title: 'Roles y Permisos', href: paths.dashboard.roles, icon: 'shield-check' },
   { key: 'inventory', title: 'Inventory & Stock', href: paths.dashboard.inventory, icon: 'stack' },
   { key: 'stores', title: 'Sucursales / Tiendas', href: paths.dashboard.stores, icon: 'buildings' },
   { key: 'cashClosing', title: 'Cash Closing', href: paths.dashboard.billing.cashClosing, icon: 'receipt' },

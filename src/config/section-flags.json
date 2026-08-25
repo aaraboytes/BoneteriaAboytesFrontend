@@ -2,7 +2,9 @@
   "description": "Manual section toggle flags for the POS & Inventory System. Set any section to true (enabled) or false (disabled).",
   "sections": {
     "overview": false,
-    "sales": false,
+    "sales": true,
+    "returns": true,
+    "roles": true,
     "inventory": true,
     "cashClosing": false,
     "products": true,

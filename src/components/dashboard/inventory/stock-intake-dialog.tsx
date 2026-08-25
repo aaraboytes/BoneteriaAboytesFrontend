@@ -248,7 +248,7 @@ export function StockIntakeDialog({
       const worksheet = workbook.addWorksheet('Ingreso de Inventario');
 
       worksheet.columns = [
-        { header: 'ID Producto', key: 'productId', width: 18 },
+        { header: 'ID Producto', key: 'productId', width: 18, style: { numFmt: '0' } },
         { header: 'SKU', key: 'sku', width: 18 },
         { header: 'Descripción', key: 'description', width: 45 },
         { header: 'Proveedor / Marca', key: 'provider', width: 25 },

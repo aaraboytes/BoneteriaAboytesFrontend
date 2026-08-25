@@ -4,6 +4,8 @@ export const paths = {
   dashboard: {
     overview: '/dashboard/overview',
     sales: '/dashboard/sales',
+    returns: '/dashboard/returns',
+    roles: '/dashboard/roles',
     inventory: '/dashboard/inventory',
     stores: '/dashboard/stores',
     storeMap: (id: string | number) => `/dashboard/stores/${id}/map`,

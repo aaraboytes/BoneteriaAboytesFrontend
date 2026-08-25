@@ -209,7 +209,7 @@ export function MissingProductsDialog({
       const worksheet = workbook.addWorksheet('Productos Faltantes');
 
       worksheet.columns = [
-        { header: 'ID Producto', key: 'productId', width: 18 },
+        { header: 'ID Producto', key: 'productId', width: 18, style: { numFmt: '0' } },
         { header: 'SKU', key: 'sku', width: 18 },
         { header: 'Descripción', key: 'description', width: 45 },
         { header: 'Modelo', key: 'model', width: 18 },
