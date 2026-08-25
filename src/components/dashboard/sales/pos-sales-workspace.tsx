@@ -63,6 +63,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
   const [cashStatusLoading, setCashStatusLoading] = React.useState(false);
   const [movementDialogOpen, setMovementDialogOpen] = React.useState(false);
   const [closingDialogOpen, setClosingDialogOpen] = React.useState(false);
+  const [openingDialogOpen, setOpeningDialogOpen] = React.useState(false);
   const [toast, setToast] = React.useState<string | null>(null);
 
   const handleSuccessMessage = (message: string): void => {
@@ -100,6 +101,10 @@ export function PosSalesWorkspace(): React.JSX.Element {
     try {
       const res = await apiClient.get<CashStatus>('/CashRegister/status', { params: { storeId } });
       setCashStatus(res.data);
+      // Prompt for an opening automatically the first time this store is found to need one
+      // (page load, or switching to it); the user can dismiss it and reopen later via the
+      // blocking panel's button, but they still can't transact until it's actually done.
+      setOpeningDialogOpen(!res.data.hasOpenSession && !res.data.requiresPriorClosing);
     } catch (err) {
       console.error('Failed to fetch cash register status', err);
     } finally {
@@ -322,6 +327,11 @@ export function PosSalesWorkspace(): React.JSX.Element {
                     ? 'Debes cerrar la caja pendiente antes de continuar registrando ventas en esta sucursal.'
                     : 'Debes abrir la caja registradora antes de registrar ventas en esta sucursal.'}
                 </Typography>
+                {!cashStatus?.requiresPriorClosing && !openingDialogOpen ? (
+                  <Button variant="contained" onClick={() => setOpeningDialogOpen(true)} sx={{ mt: 1 }}>
+                    Abrir Caja
+                  </Button>
+                ) : null}
               </Stack>
             </CardContent>
           </Card>
@@ -383,11 +393,12 @@ export function PosSalesWorkspace(): React.JSX.Element {
 
       {storeId && cashStatus && !cashStatus.hasOpenSession && !cashStatus.requiresPriorClosing ? (
         <CashOpeningDialog
-          open
+          open={openingDialogOpen}
           storeId={storeId}
           storeName={selectedStoreName}
           employeeId={employeeId}
           onOpened={fetchCashStatus}
+          onClose={() => setOpeningDialogOpen(false)}
         />
       ) : null}
 

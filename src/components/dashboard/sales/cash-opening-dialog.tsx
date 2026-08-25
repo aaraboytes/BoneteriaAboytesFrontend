@@ -18,9 +18,10 @@ export interface CashOpeningDialogProps {
   storeName: string;
   employeeId?: number;
   onOpened: () => void;
+  onClose: () => void;
 }
 
-export function CashOpeningDialog({ open, storeId, storeName, employeeId, onOpened }: CashOpeningDialogProps): React.JSX.Element {
+export function CashOpeningDialog({ open, storeId, storeName, employeeId, onOpened, onClose }: CashOpeningDialogProps): React.JSX.Element {
   const [amount, setAmount] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -52,7 +53,7 @@ export function CashOpeningDialog({ open, storeId, storeName, employeeId, onOpen
   };
 
   return (
-    <Dialog open={open} onClose={() => {}} maxWidth="xs" fullWidth disableEscapeKeyDown>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Apertura de Caja</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
@@ -74,6 +75,9 @@ export function CashOpeningDialog({ open, storeId, storeName, employeeId, onOpen
         </Stack>
       </DialogContent>
       <DialogActions>
+        <Button onClick={onClose} disabled={submitting}>
+          Más tarde
+        </Button>
         <Button variant="contained" onClick={handleSubmit} disabled={submitting}>
           {submitting ? 'Abriendo...' : 'Abrir Caja'}
         </Button>
