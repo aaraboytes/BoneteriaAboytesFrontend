@@ -12,6 +12,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
+import Snackbar from '@mui/material/Snackbar';
 import apiClient from '@/lib/api-client';
 import { useUser } from '@/hooks/use-user';
 
@@ -19,10 +20,19 @@ import { ProductSearchField, type VariantOption } from './product-search-field';
 import { CartTable, type CartLine } from './cart-table';
 import { PaymentMethodsPanel, type PaymentMethodOption, type PaymentLine } from './payment-methods-panel';
 import { SaleReceiptDialog, type CompletedSale } from './sale-receipt-dialog';
+import { CashOpeningDialog } from './cash-opening-dialog';
+import { CashMovementDialog } from './cash-movement-dialog';
+import { CashClosingDialog } from './cash-closing-dialog';
 
 interface StoreOption {
   id: number;
   name: string;
+}
+
+interface CashStatus {
+  hasOpenSession: boolean;
+  requiresPriorClosing: boolean;
+  session: { id: number; openedAt: string; openingAmount: number } | null;
 }
 
 interface SaleResult {
@@ -49,6 +59,18 @@ export function PosSalesWorkspace(): React.JSX.Element {
   const [error, setError] = React.useState<string | null>(null);
   const [completedSale, setCompletedSale] = React.useState<CompletedSale | null>(null);
 
+  const [cashStatus, setCashStatus] = React.useState<CashStatus | null>(null);
+  const [cashStatusLoading, setCashStatusLoading] = React.useState(false);
+  const [movementDialogOpen, setMovementDialogOpen] = React.useState(false);
+  const [closingDialogOpen, setClosingDialogOpen] = React.useState(false);
+  const [toast, setToast] = React.useState<string | null>(null);
+
+  const handleSuccessMessage = (message: string): void => {
+    setToast(message);
+  };
+
+  const employeeId = typeof user?.id === 'number' ? user.id : undefined;
+
   React.useEffect(() => {
     (async () => {
       try {
@@ -71,6 +93,23 @@ export function PosSalesWorkspace(): React.JSX.Element {
       }
     })();
   }, []);
+
+  const fetchCashStatus = React.useCallback(async (): Promise<void> => {
+    if (!storeId) return;
+    setCashStatusLoading(true);
+    try {
+      const res = await apiClient.get<CashStatus>('/CashRegister/status', { params: { storeId } });
+      setCashStatus(res.data);
+    } catch (err) {
+      console.error('Failed to fetch cash register status', err);
+    } finally {
+      setCashStatusLoading(false);
+    }
+  }, [storeId]);
+
+  React.useEffect(() => {
+    fetchCashStatus();
+  }, [fetchCashStatus]);
 
   const subtotal = cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
 
@@ -163,7 +202,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
       const payload = {
         storeId,
         customerId: customerId ? Number(customerId) : undefined,
-        employeeId: typeof user?.id === 'number' ? user.id : undefined,
+        employeeId,
         couponCode: couponCode.trim() || undefined,
         saleItems: cart.map((line) => ({
           productVariantId: line.productVariantId,
@@ -209,15 +248,59 @@ export function PosSalesWorkspace(): React.JSX.Element {
     } catch (err: any) {
       console.error('Failed to create sale', err);
       setError(err?.response?.data?.message || 'Error al procesar la venta.');
+      const code = err?.response?.data?.code;
+      if (code === 'NO_CASH_SESSION' || code === 'STALE_CASH_SESSION') {
+        fetchCashStatus();
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
+  const selectedStoreName = stores.find((s) => s.id === storeId)?.name ?? '';
+  const canTransact = cashStatus?.hasOpenSession ?? false;
+
   return (
     <Box sx={{ flexGrow: 1 }}>
       <Stack spacing={3}>
-        <Typography variant="h4">Punto de Venta</Typography>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ sm: 'center' }}>
+          <Typography variant="h4">Punto de Venta</Typography>
+          {canTransact ? (
+            <Stack direction="row" spacing={1}>
+              <Button variant="outlined" onClick={() => setMovementDialogOpen(true)}>
+                Movimiento de Caja
+              </Button>
+              <Button variant="outlined" color="warning" onClick={() => setClosingDialogOpen(true)}>
+                Cerrar Caja
+              </Button>
+            </Stack>
+          ) : null}
+        </Stack>
+
+        <Stack direction="row" spacing={2}>
+          <TextField
+            select
+            label="Sucursal"
+            value={storeId}
+            onChange={(e) => setStoreId(Number(e.target.value))}
+            sx={{ width: 220 }}
+          >
+            {stores.map((store) => (
+              <MenuItem key={store.id} value={store.id}>
+                {store.name}
+              </MenuItem>
+            ))}
+          </TextField>
+          {canTransact ? (
+            <TextField
+              label="ID Cliente (opcional)"
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              type="number"
+              sx={{ width: 200 }}
+            />
+          ) : null}
+        </Stack>
 
         {error ? (
           <Alert severity="error" onClose={() => setError(null)}>
@@ -225,84 +308,140 @@ export function PosSalesWorkspace(): React.JSX.Element {
           </Alert>
         ) : null}
 
-        <Grid container spacing={3}>
-          <Grid size={{ xs: 12, md: 7 }}>
-            <Card>
-              <CardContent>
-                <Stack spacing={2}>
-                  <Stack direction="row" spacing={2}>
-                    <TextField
-                      select
-                      label="Sucursal"
-                      value={storeId}
-                      onChange={(e) => setStoreId(Number(e.target.value))}
-                      sx={{ width: 220 }}
-                    >
-                      {stores.map((store) => (
-                        <MenuItem key={store.id} value={store.id}>
-                          {store.name}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                    <TextField
-                      label="ID Cliente (opcional)"
-                      value={customerId}
-                      onChange={(e) => setCustomerId(e.target.value)}
-                      type="number"
-                      sx={{ width: 200 }}
-                    />
+        {!canTransact && !cashStatusLoading ? (
+          <Card>
+            <CardContent>
+              <Stack spacing={1} alignItems="center" sx={{ py: 4 }}>
+                <Typography variant="h6">
+                  {cashStatus?.requiresPriorClosing
+                    ? 'Hay una caja abierta de un día anterior'
+                    : 'La caja no ha sido abierta'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" textAlign="center">
+                  {cashStatus?.requiresPriorClosing
+                    ? 'Debes cerrar la caja pendiente antes de continuar registrando ventas en esta sucursal.'
+                    : 'Debes abrir la caja registradora antes de registrar ventas en esta sucursal.'}
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        ) : (
+          <Grid container spacing={3}>
+            <Grid size={{ xs: 12, md: 7 }}>
+              <Card>
+                <CardContent>
+                  <Stack spacing={2}>
+                    <ProductSearchField storeId={storeId} onSelect={handleAddToCart} />
+
+                    <Divider />
+
+                    <CartTable lines={cart} onUpdateLine={handleUpdateLine} onRemoveLine={handleRemoveLine} />
                   </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
 
-                  <ProductSearchField storeId={storeId} onSelect={handleAddToCart} />
+            <Grid size={{ xs: 12, md: 5 }}>
+              <Card>
+                <CardContent>
+                  <Stack spacing={2}>
+                    <Stack direction="row" spacing={1}>
+                      <TextField
+                        label="Código de cupón"
+                        size="small"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value)}
+                        fullWidth
+                      />
+                      <Button variant="outlined" onClick={handleValidateCoupon}>
+                        Validar
+                      </Button>
+                    </Stack>
+                    {couponMessage ? <Alert severity={couponMessage.severity}>{couponMessage.text}</Alert> : null}
 
-                  <Divider />
+                    <Divider />
 
-                  <CartTable lines={cart} onUpdateLine={handleUpdateLine} onRemoveLine={handleRemoveLine} />
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
+                    <PaymentMethodsPanel methods={paymentMethods} payments={payments} onChange={setPayments} amountDue={subtotal} />
 
-          <Grid size={{ xs: 12, md: 5 }}>
-            <Card>
-              <CardContent>
-                <Stack spacing={2}>
-                  <Stack direction="row" spacing={1}>
-                    <TextField
-                      label="Código de cupón"
-                      size="small"
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value)}
-                      fullWidth
-                    />
-                    <Button variant="outlined" onClick={handleValidateCoupon}>
-                      Validar
+                    <Divider />
+
+                    <Typography variant="h6">Subtotal: ${subtotal.toFixed(2)}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Impuestos y descuentos finales se calculan al confirmar la venta.
+                    </Typography>
+
+                    <Button variant="contained" size="large" onClick={handleSubmit} disabled={submitting}>
+                      {submitting ? 'Procesando...' : 'Cobrar'}
                     </Button>
                   </Stack>
-                  {couponMessage ? <Alert severity={couponMessage.severity}>{couponMessage.text}</Alert> : null}
-
-                  <Divider />
-
-                  <PaymentMethodsPanel methods={paymentMethods} payments={payments} onChange={setPayments} amountDue={subtotal} />
-
-                  <Divider />
-
-                  <Typography variant="h6">Subtotal: ${subtotal.toFixed(2)}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Impuestos y descuentos finales se calculan al confirmar la venta.
-                  </Typography>
-
-                  <Button variant="contained" size="large" onClick={handleSubmit} disabled={submitting}>
-                    {submitting ? 'Procesando...' : 'Cobrar'}
-                  </Button>
-                </Stack>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </Grid>
           </Grid>
-        </Grid>
+        )}
       </Stack>
 
+      {storeId && cashStatus && !cashStatus.hasOpenSession && !cashStatus.requiresPriorClosing ? (
+        <CashOpeningDialog
+          open
+          storeId={storeId}
+          storeName={selectedStoreName}
+          employeeId={employeeId}
+          onOpened={fetchCashStatus}
+        />
+      ) : null}
+
+      {storeId && cashStatus?.requiresPriorClosing && cashStatus.session ? (
+        <CashClosingDialog
+          open
+          forced
+          sessionId={cashStatus.session.id}
+          storeName={selectedStoreName}
+          employeeId={employeeId}
+          onClose={() => {}}
+          onClosed={fetchCashStatus}
+        />
+      ) : null}
+
+      {storeId && cashStatus?.session ? (
+        <CashClosingDialog
+          open={closingDialogOpen}
+          sessionId={cashStatus.session.id}
+          storeName={selectedStoreName}
+          employeeId={employeeId}
+          onClose={() => setClosingDialogOpen(false)}
+          onClosed={() => {
+            setClosingDialogOpen(false);
+            fetchCashStatus();
+          }}
+        />
+      ) : null}
+
+      {storeId ? (
+        <CashMovementDialog
+          open={movementDialogOpen}
+          storeId={storeId}
+          employeeId={employeeId}
+          onClose={() => setMovementDialogOpen(false)}
+          onSuccess={(message) => {
+            setMovementDialogOpen(false);
+            handleSuccessMessage(message);
+          }}
+        />
+      ) : null}
+
       <SaleReceiptDialog open={completedSale !== null} sale={completedSale} onClose={() => setCompletedSale(null)} />
+
+      <Snackbar
+        open={toast !== null}
+        autoHideDuration={5000}
+        onClose={() => setToast(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={() => setToast(null)} severity="success" variant="filled" sx={{ width: '100%' }}>
+          {toast}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
