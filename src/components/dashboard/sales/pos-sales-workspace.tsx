@@ -206,7 +206,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
                     />
                   </Stack>
 
-                  <ProductSearchField onSelect={handleAddToCart} />
+                  <ProductSearchField storeId={storeId} onSelect={handleAddToCart} />
 
                   <Divider />
 

@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import Autocomplete from '@mui/material/Autocomplete';
+import Autocomplete, { createFilterOptions } from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
@@ -18,28 +18,21 @@ export interface VariantOption {
   color?: string | null;
   unitPrice: number;
   stockQuantity: number;
+  barcodes: string[];
 }
 
-function flattenProducts(products: any[]): VariantOption[] {
-  const options: VariantOption[] = [];
-  for (const product of products) {
-    const variants = Array.isArray(product.variants) ? product.variants : [];
-    for (const variant of variants) {
-      const sizeLabel = typeof variant.size === 'object' ? variant.size?.name : variant.size;
-      const colorLabel = typeof variant.color === 'object' ? variant.color?.name : variant.color;
-      options.push({
-        productVariantId: variant.id,
-        productId: product.id,
-        description: product.description,
-        sku: variant.sku || 'N/A',
-        size: sizeLabel ?? null,
-        color: colorLabel ?? null,
-        unitPrice: variant.price && variant.price > 0 ? variant.price : product.price,
-        stockQuantity: variant.inventory?.stockQuantity ?? 0,
-      });
-    }
-  }
-  return options;
+function mapInventoryItems(items: any[]): VariantOption[] {
+  return items.map((item) => ({
+    productVariantId: item.productVariantId ?? item.id,
+    productId: item.productId,
+    description: item.description ?? 'Sin descripción',
+    sku: item.sku || 'N/A',
+    size: item.size && item.size !== 'N/A' ? item.size : null,
+    color: item.color && item.color !== 'N/A' ? item.color : null,
+    unitPrice: item.price ?? 0,
+    stockQuantity: item.stockQuantity ?? 0,
+    barcodes: Array.isArray(item.barcodes) ? item.barcodes : [],
+  }));
 }
 
 function variantLabel(option: VariantOption): string {
@@ -49,11 +42,23 @@ function variantLabel(option: VariantOption): string {
   return parts.join(' - ');
 }
 
+// Same data source and matching fields (description, SKU, barcodes) as the working
+// Inventory search (src/components/dashboard/inventory/inventory-table.tsx), filtered
+// entirely client-side over the full per-store list - no debounce, no server round trip
+// per keystroke, and no dependence on ProductVariant.Inventory (a one-to-one nav property
+// on a table whose real key is (ProductVariantId, StoreId), which silently returns
+// store-inconsistent stock - this is why /api/inventory?storeId= is the correct source).
+const filterOptions = createFilterOptions<VariantOption>({
+  stringify: (option) => `${option.description} ${option.sku} ${option.barcodes.join(' ')}`,
+  limit: 50,
+});
+
 export interface ProductSearchFieldProps {
+  storeId: number | '';
   onSelect: (option: VariantOption) => void;
 }
 
-export function ProductSearchField({ onSelect }: ProductSearchFieldProps): React.JSX.Element {
+export function ProductSearchField({ storeId, onSelect }: ProductSearchFieldProps): React.JSX.Element {
   const [inputValue, setInputValue] = React.useState('');
   const [options, setOptions] = React.useState<VariantOption[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -61,54 +66,40 @@ export function ProductSearchField({ onSelect }: ProductSearchFieldProps): React
   const [barcodeError, setBarcodeError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    let active = true;
-    if (inputValue.trim().length < 2) {
+    if (!storeId) {
       setOptions([]);
-      return undefined;
+      return;
     }
+    let active = true;
     setLoading(true);
-    const timer = setTimeout(async () => {
+    (async () => {
       try {
-        const res = await apiClient.get(`/Products?search=${encodeURIComponent(inputValue)}`);
+        const res = await apiClient.get(`/Inventory?storeId=${storeId}`);
         if (active && Array.isArray(res.data)) {
-          setOptions(flattenProducts(res.data));
+          setOptions(mapInventoryItems(res.data));
         }
       } catch (err) {
-        console.error('Failed to search products', err);
+        console.error('Failed to load inventory for product search', err);
       } finally {
         if (active) setLoading(false);
       }
-    }, 400);
+    })();
     return () => {
       active = false;
-      clearTimeout(timer);
     };
-  }, [inputValue]);
+  }, [storeId]);
 
-  const handleBarcodeScan = async (): Promise<void> => {
+  const handleBarcodeScan = (): void => {
     const code = barcode.trim();
     if (!code) return;
     setBarcodeError(null);
-    try {
-      const res = await apiClient.get(`/Products/scan/${encodeURIComponent(code)}`);
-      const variant = res.data;
-      const sizeLabel = typeof variant.size === 'object' ? variant.size?.name : variant.size;
-      const colorLabel = typeof variant.color === 'object' ? variant.color?.name : variant.color;
-      onSelect({
-        productVariantId: variant.id,
-        productId: variant.product?.id,
-        description: variant.product?.description ?? 'Sin descripción',
-        sku: variant.sku || 'N/A',
-        size: sizeLabel ?? null,
-        color: colorLabel ?? null,
-        unitPrice: variant.price && variant.price > 0 ? variant.price : variant.product?.price ?? 0,
-        stockQuantity: variant.inventory?.stockQuantity ?? 0,
-      });
-      setBarcode('');
-    } catch (err) {
-      console.error('Barcode scan failed', err);
-      setBarcodeError('Código de barras no encontrado');
+    const match = options.find((option) => option.barcodes.includes(code));
+    if (!match) {
+      setBarcodeError('Código de barras no encontrado en esta sucursal');
+      return;
     }
+    onSelect(match);
+    setBarcode('');
   };
 
   return (
@@ -116,6 +107,7 @@ export function ProductSearchField({ onSelect }: ProductSearchFieldProps): React
       <Autocomplete
         options={options}
         loading={loading}
+        filterOptions={filterOptions}
         value={null}
         inputValue={inputValue}
         onInputChange={(_, value, reason) => {
@@ -142,7 +134,8 @@ export function ProductSearchField({ onSelect }: ProductSearchFieldProps): React
         renderInput={(params) => (
           <TextField
             {...params}
-            label="Buscar producto por nombre o SKU"
+            label="Buscar producto por nombre, SKU o código de barras"
+            disabled={!storeId}
             InputProps={{
               ...params.InputProps,
               endAdornment: (
@@ -168,6 +161,7 @@ export function ProductSearchField({ onSelect }: ProductSearchFieldProps): React
         error={Boolean(barcodeError)}
         helperText={barcodeError ?? 'Escanee o escriba el código y presione Enter'}
         size="small"
+        disabled={!storeId}
       />
     </Stack>
   );
