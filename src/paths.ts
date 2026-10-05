@@ -5,6 +5,7 @@ export const paths = {
     overview: '/dashboard/overview',
     sales: '/dashboard/sales',
     salesHistory: '/dashboard/sales-history',
+    reports: { daily: '/dashboard/reports/daily' },
     returns: '/dashboard/returns',
     roles: '/dashboard/roles',
     inventory: '/dashboard/inventory',

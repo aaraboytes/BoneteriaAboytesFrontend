@@ -17,6 +17,6 @@
     "consultations": false,
     "appointments": false,
     "billing": false,
-    "reports": false
+    "reports": true
   }
 }

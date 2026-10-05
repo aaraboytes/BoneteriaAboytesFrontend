@@ -5,6 +5,7 @@ export const navItems = [
   { key: 'overview', title: 'Overview', href: paths.dashboard.overview, icon: 'chart-pie' },
   { key: 'sales', title: 'Punto de Venta', href: paths.dashboard.sales, icon: 'currency-dollar' },
   { key: 'salesHistory', title: 'Historial de Ventas', href: paths.dashboard.salesHistory, icon: 'clipboard-text' },
+  { key: 'reports', title: 'Reporte del Día', href: paths.dashboard.reports.daily, icon: 'chart-pie' },
   { key: 'returns', title: 'Devoluciones', href: paths.dashboard.returns, icon: 'arrow-counter-clockwise' },
   { key: 'roles', title: 'Roles y Permisos', href: paths.dashboard.roles, icon: 'shield-check' },
   { key: 'inventory', title: 'Inventory & Stock', href: paths.dashboard.inventory, icon: 'stack' },
