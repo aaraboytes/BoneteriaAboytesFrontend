@@ -7,7 +7,7 @@
     "returns": true,
     "roles": true,
     "inventory": true,
-    "cashClosing": false,
+    "cashClosing": true,
     "products": true,
     "services": false,
     "customers": false,

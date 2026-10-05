@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import Autocomplete, { createFilterOptions } from '@mui/material/Autocomplete';
+import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
@@ -21,19 +21,19 @@ export interface VariantOption {
   barcodes: string[];
 }
 
-function mapInventoryItems(items: any[]): VariantOption[] {
-  return items.map((item) => ({
-    productVariantId: item.productVariantId ?? item.id,
-    productId: item.productId,
-    description: item.description ?? 'Sin descripción',
-    sku: item.sku || 'N/A',
-    size: item.size && item.size !== 'N/A' ? item.size : null,
-    color: item.color && item.color !== 'N/A' ? item.color : null,
-    unitPrice: item.price ?? 0,
-    stockQuantity: item.stockQuantity ?? 0,
-    barcodes: Array.isArray(item.barcodes) ? item.barcodes : [],
-  }));
+interface SearchResult {
+  productVariantId: string;
+  productId: number;
+  description: string;
+  sku: string;
+  size: string | null;
+  color: string | null;
+  price: number;
+  stockQuantity: number;
+  barcodes: string[];
 }
+
+const toOption = (r: SearchResult): VariantOption => ({ ...r, unitPrice: r.price });
 
 function variantLabel(option: VariantOption): string {
   const parts = [option.description, option.sku];
@@ -42,22 +42,13 @@ function variantLabel(option: VariantOption): string {
   return parts.join(' - ');
 }
 
-// Same data source and matching fields (description, SKU, barcodes) as the working
-// Inventory search (src/components/dashboard/inventory/inventory-table.tsx), filtered
-// entirely client-side over the full per-store list - no debounce, no server round trip
-// per keystroke, and no dependence on ProductVariant.Inventory (a one-to-one nav property
-// on a table whose real key is (ProductVariantId, StoreId), which silently returns
-// store-inconsistent stock - this is why /api/inventory?storeId= is the correct source).
-const filterOptions = createFilterOptions<VariantOption>({
-  stringify: (option) => `${option.description} ${option.sku} ${option.barcodes.join(' ')}`,
-  limit: 50,
-});
-
 export interface ProductSearchFieldProps {
   storeId: number | '';
   onSelect: (option: VariantOption) => void;
 }
 
+// Searches the server as the cashier types (description, SKU or barcode at this store), so the
+// stock shown is current and the page doesn't load the whole catalog.
 export function ProductSearchField({ storeId, onSelect }: ProductSearchFieldProps): React.JSX.Element {
   const [inputValue, setInputValue] = React.useState('');
   const [options, setOptions] = React.useState<VariantOption[]>([]);
@@ -66,40 +57,45 @@ export function ProductSearchField({ storeId, onSelect }: ProductSearchFieldProp
   const [barcodeError, setBarcodeError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!storeId) {
+    const q = inputValue.trim();
+    if (!storeId || q.length < 2) {
       setOptions([]);
       return;
     }
     let active = true;
     setLoading(true);
-    (async () => {
+    const timer = setTimeout(async () => {
       try {
-        const res = await apiClient.get(`/Inventory?storeId=${storeId}`);
-        if (active && Array.isArray(res.data)) {
-          setOptions(mapInventoryItems(res.data));
-        }
+        const res = await apiClient.get<SearchResult[]>('/Inventory/search', { params: { storeId, q } });
+        if (active) setOptions(res.data.map(toOption));
       } catch (err) {
-        console.error('Failed to load inventory for product search', err);
+        console.error('Product search failed', err);
       } finally {
         if (active) setLoading(false);
       }
-    })();
+    }, 250);
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, [storeId]);
+  }, [inputValue, storeId]);
 
-  const handleBarcodeScan = (): void => {
+  const handleBarcodeScan = async (): Promise<void> => {
     const code = barcode.trim();
-    if (!code) return;
+    if (!code || !storeId) return;
     setBarcodeError(null);
-    const match = options.find((option) => option.barcodes.includes(code));
-    if (!match) {
-      setBarcodeError('Código de barras no encontrado en esta sucursal');
-      return;
+    try {
+      const res = await apiClient.get<SearchResult[]>('/Inventory/search', { params: { storeId, barcode: code } });
+      if (res.data.length === 0) {
+        setBarcodeError('Código de barras no encontrado');
+        return;
+      }
+      onSelect(toOption(res.data[0]));
+      setBarcode('');
+    } catch (err) {
+      console.error('Barcode lookup failed', err);
+      setBarcodeError('No se pudo buscar el código');
     }
-    onSelect(match);
-    setBarcode('');
   };
 
   return (
@@ -107,7 +103,8 @@ export function ProductSearchField({ storeId, onSelect }: ProductSearchFieldProp
       <Autocomplete
         options={options}
         loading={loading}
-        filterOptions={filterOptions}
+        // The server already filtered; show its results as they are.
+        filterOptions={(x) => x}
         value={null}
         inputValue={inputValue}
         onInputChange={(_, value, reason) => {
@@ -115,6 +112,7 @@ export function ProductSearchField({ storeId, onSelect }: ProductSearchFieldProp
         }}
         getOptionLabel={(option) => variantLabel(option)}
         isOptionEqualToValue={(option, value) => option.productVariantId === value.productVariantId}
+        noOptionsText={inputValue.trim().length < 2 ? 'Escribe al menos 2 letras' : 'Sin resultados'}
         onChange={(_, value) => {
           if (value) {
             onSelect(value);
@@ -124,8 +122,10 @@ export function ProductSearchField({ storeId, onSelect }: ProductSearchFieldProp
         renderOption={(props, option) => (
           <Box component="li" {...props} key={option.productVariantId}>
             <Stack>
-              <Typography variant="body2" fontWeight={600}>{variantLabel(option)}</Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="body2" fontWeight={600}>
+                {variantLabel(option)}
+              </Typography>
+              <Typography variant="caption" color={option.stockQuantity > 0 ? 'text.secondary' : 'error'}>
                 Stock: {option.stockQuantity} · ${option.unitPrice.toFixed(2)}
               </Typography>
             </Stack>

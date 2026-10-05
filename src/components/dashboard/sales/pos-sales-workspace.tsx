@@ -24,6 +24,7 @@ import { CashOpeningDialog } from './cash-opening-dialog';
 import { CashMovementDialog } from './cash-movement-dialog';
 import { CashClosingDialog } from './cash-closing-dialog';
 import { CashierSwitchDialog, type CashierTicket } from './cashier-switch-dialog';
+import { CustomerPicker, type CustomerOption } from './customer-picker';
 
 interface CashRegisterOption {
   id: number;
@@ -67,7 +68,8 @@ export function PosSalesWorkspace(): React.JSX.Element {
   const [registers, setRegisters] = React.useState<CashRegisterOption[]>([]);
   const [registerId, setRegisterId] = React.useState<number | ''>('');
   const [cashierDialogOpen, setCashierDialogOpen] = React.useState(false);
-  const [customerId, setCustomerId] = React.useState('');
+  const [customer, setCustomer] = React.useState<CustomerOption | null>(null);
+  const customerId = customer?.id;
   const [cart, setCart] = React.useState<CartLine[]>([]);
   const [couponCode, setCouponCode] = React.useState('');
   // The coupon sent to the preview and the sale (set by "Validar").
@@ -155,7 +157,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
         const res = await apiClient.post<SalePreview>(
           '/Sales/preview',
           {
-            customerId: customerId ? Number(customerId) : undefined,
+            customerId,
             couponCode: appliedCoupon || undefined,
             saleItems: cart.map((line) => ({
               productVariantId: line.productVariantId,
@@ -228,7 +230,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
     setAppliedCoupon('');
     setPreview(null);
     setPayments([]);
-    setCustomerId('');
+    setCustomer(null);
   };
 
   const handleCharge = (): void => {
@@ -283,7 +285,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
 
       // Store, drawer session and cashier come from the cashier ticket on the server.
       const payload = {
-        customerId: customerId ? Number(customerId) : undefined,
+        customerId,
         couponCode: appliedCoupon || undefined,
         saleItems: cart.map((line) => ({
           productVariantId: line.productVariantId,
@@ -385,13 +387,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
             ))}
           </TextField>
           {canTransact ? (
-            <TextField
-              label="ID Cliente (opcional)"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              type="number"
-              sx={{ width: 200 }}
-            />
+            <CustomerPicker value={customer} onChange={setCustomer} />
           ) : null}
         </Stack>
 

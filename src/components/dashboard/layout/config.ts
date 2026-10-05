@@ -10,7 +10,7 @@ export const navItems = [
   { key: 'roles', title: 'Roles y Permisos', href: paths.dashboard.roles, icon: 'shield-check' },
   { key: 'inventory', title: 'Inventory & Stock', href: paths.dashboard.inventory, icon: 'stack' },
   { key: 'stores', title: 'Sucursales / Tiendas', href: paths.dashboard.stores, icon: 'buildings' },
-  { key: 'cashClosing', title: 'Cash Closing', href: paths.dashboard.billing.cashClosing, icon: 'receipt' },
+  { key: 'cashClosing', title: 'Cortes de Caja', href: paths.dashboard.cashSessions, icon: 'receipt' },
   { key: 'products', title: 'Products', href: paths.dashboard.products, icon: 'package' },
   { key: 'suppliers', title: 'Proveedores', href: paths.dashboard.suppliers, icon: 'truck' },
   { key: 'services', title: 'Services', href: paths.dashboard.services, icon: 'headset' },

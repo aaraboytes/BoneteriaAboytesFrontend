@@ -6,6 +6,7 @@ export const paths = {
     sales: '/dashboard/sales',
     salesHistory: '/dashboard/sales-history',
     reports: { daily: '/dashboard/reports/daily' },
+    cashSessions: '/dashboard/cash-sessions',
     returns: '/dashboard/returns',
     roles: '/dashboard/roles',
     inventory: '/dashboard/inventory',

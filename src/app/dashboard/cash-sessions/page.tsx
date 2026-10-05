@@ -6,19 +6,17 @@ import Typography from '@mui/material/Typography';
 
 import { config } from '@/config';
 import { PermissionGuard } from '@/components/auth/permission-guard';
-import { DailyReportView } from '@/components/dashboard/reports/daily-report-view';
+import { CashSessionsTable } from '@/components/dashboard/cash-sessions/cash-sessions-table';
 
-export const metadata = { title: `Reporte del Día | Dashboard | ${config.site.name}` } satisfies Metadata;
+export const metadata = { title: `Cortes de Caja | Dashboard | ${config.site.name}` } satisfies Metadata;
 
 export default function Page(): React.JSX.Element {
   return (
     <Box sx={{ p: 3 }}>
       <Stack spacing={3}>
-        <Typography variant="h4" className="no-print">
-          Reporte del Día
-        </Typography>
+        <Typography variant="h4">Cortes de Caja</Typography>
         <PermissionGuard permission="reports.view">
-          <DailyReportView />
+          <CashSessionsTable />
         </PermissionGuard>
       </Stack>
     </Box>

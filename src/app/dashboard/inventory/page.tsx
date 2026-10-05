@@ -118,11 +118,10 @@ export default function InventoryPage(): React.JSX.Element {
       setItems((prev) =>
         prev.map((i) => (i.productVariantId === variantId ? { ...i, stockQuantity: newStock } : i))
       );
-    } catch (err) {
+    } catch (err: any) {
+      // Keep showing the real stock: the server refused the change (e.g. it would go below zero).
       console.error('Failed to adjust stock on backend', err);
-      setItems((prev) =>
-        prev.map((i) => (i.productVariantId === variantId ? { ...i, stockQuantity: newStock } : i))
-      );
+      setError(err?.response?.data?.message || 'No se pudo ajustar el inventario.');
     }
   };
 
@@ -139,8 +138,10 @@ export default function InventoryPage(): React.JSX.Element {
           storeId: selectedStoreId,
           quantityDelta: delta,
         });
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to adjust stock on backend', err);
+        setError(err?.response?.data?.message || 'No se pudo ajustar el inventario.');
+        return;
       }
     }
 

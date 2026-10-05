@@ -40,7 +40,7 @@ export function SideNav(): React.JSX.Element {
       const roleLower = user?.role?.toLowerCase();
       return roleLower === 'admin' || roleLower === 'administrador' || roleLower === 'developer' || roleLower === 'desarrollador' || roleLower === 'jefe' || roleLower === 'gerente';
     }
-    if (item.key === 'reports') {
+    if (item.key === 'reports' || item.key === 'cashClosing') {
       return user?.permissions?.includes('reports.view') ?? false;
     }
     return true;

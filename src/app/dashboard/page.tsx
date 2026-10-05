@@ -9,7 +9,7 @@ export default function Page(): React.JSX.Element {
   const router = useRouter();
 
   React.useEffect(() => {
-    router.replace(paths.dashboard.overview);
+    router.replace(paths.dashboard.sales);
   }, [router]);
 
   return (
