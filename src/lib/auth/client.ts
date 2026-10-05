@@ -48,8 +48,12 @@ class AuthClient {
 
       return {};
     } catch (error: unknown) {
-      if ((error as AxiosError).response && (error as AxiosError).response?.status === 401) {
-        return { error: 'Invalid credentials' };
+      const status = (error as AxiosError).response?.status;
+      if (status === 401) {
+        return { error: 'Usuario o contraseña incorrectos.' };
+      }
+      if (status === 429) {
+        return { error: 'Demasiados intentos. Espera un minuto e inténtalo de nuevo.' };
       }
       return { error: 'Something went wrong' };
     }
@@ -60,6 +64,13 @@ class AuthClient {
   }
 
   async signOut(): Promise<{ error?: string }> {
+    try {
+      // Closes the login session on the server; the token is discarded either way.
+      await apiClient.post('Auth/logout');
+    } catch {
+      // Ignore: an expired token can't be logged out and is already useless.
+    }
+
     try {
       localStorage.removeItem('custom-auth-token');
     } catch (err) {

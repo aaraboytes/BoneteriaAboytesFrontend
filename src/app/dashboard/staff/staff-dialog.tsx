@@ -120,7 +120,8 @@ function VacationRequestDialog({ open, availableDays, onClose, onSubmit }: Vacat
 export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProps): React.JSX.Element {
     const isEditMode = Boolean(staff);
     const { user: currentUser } = useUser();
-    const isAdmin = currentUser?.role === 'admin';
+    // Matches the server: only users with users.manage can change passwords or deactivate staff.
+    const isAdmin = currentUser?.permissions?.includes('users.manage') ?? false;
     const [tabValue, setTabValue] = React.useState(0);
     const [vacationDialogOpen, setVacationDialogOpen] = React.useState(false);
 
