@@ -39,13 +39,27 @@ interface CashStatus {
   cashInDrawer: number | null;
 }
 
+// Server-side pricing of the cart (POST /Sales/preview): the same numbers the sale will charge.
+interface SalePreview {
+  subtotal: number;
+  discountTotal: number;
+  taxTotal: number;
+  total: number;
+  priceIncludesTax: boolean;
+  couponError: string | null;
+  discounts: { amount: number; reason: string }[];
+}
+
 interface SaleResult {
   id: number;
+  folio: string | null;
   date: string;
   subtotal: number;
   taxTotal: number;
   discountTotal: number;
   total: number;
+  saleItems: { description: string | null; sku: string | null; unitPrice: number; quantity: number }[];
+  payments: { paymentMethodId: number; amount: number; receivedAmount: number | null; changeGiven: number | null }[];
 }
 
 export function PosSalesWorkspace(): React.JSX.Element {
@@ -56,7 +70,10 @@ export function PosSalesWorkspace(): React.JSX.Element {
   const [customerId, setCustomerId] = React.useState('');
   const [cart, setCart] = React.useState<CartLine[]>([]);
   const [couponCode, setCouponCode] = React.useState('');
-  const [couponMessage, setCouponMessage] = React.useState<{ severity: 'success' | 'error'; text: string } | null>(null);
+  // The coupon sent to the preview and the sale (set by "Validar").
+  const [appliedCoupon, setAppliedCoupon] = React.useState('');
+  const [preview, setPreview] = React.useState<SalePreview | null>(null);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = React.useState<PaymentMethodOption[]>([]);
   const [payments, setPayments] = React.useState<PaymentLine[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
@@ -126,6 +143,42 @@ export function PosSalesWorkspace(): React.JSX.Element {
 
   const subtotal = cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
 
+  // Re-price on the server whenever the cart, coupon or customer changes (debounced).
+  React.useEffect(() => {
+    if (!registerId || cart.length === 0) {
+      setPreview(null);
+      setPreviewError(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiClient.post<SalePreview>(
+          '/Sales/preview',
+          {
+            customerId: customerId ? Number(customerId) : undefined,
+            couponCode: appliedCoupon || undefined,
+            saleItems: cart.map((line) => ({
+              productVariantId: line.productVariantId,
+              quantity: line.quantity,
+              unitPrice: line.unitPrice,
+            })),
+          },
+          { params: { cashRegisterId: registerId } }
+        );
+        setPreview(res.data);
+        setPreviewError(null);
+      } catch (err: any) {
+        setPreview(null);
+        setPreviewError(err?.response?.data?.message || 'No se pudo calcular el total.');
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [cart, appliedCoupon, customerId, registerId]);
+
+  // What must be paid: the server's total once known.
+  const amountDue = preview?.total ?? subtotal;
+  const totalReceived = payments.reduce((sum, p) => sum + (p.paymentMethodId !== '' ? parseFloat(p.receivedAmount) || 0 : 0), 0);
+
   const handleAddToCart = (option: VariantOption): void => {
     setCart((prev) => {
       const existing = prev.find((line) => line.productVariantId === option.productVariantId);
@@ -155,24 +208,25 @@ export function PosSalesWorkspace(): React.JSX.Element {
     setCart((prev) => prev.filter((line) => line.productVariantId !== productVariantId));
   };
 
-  const handleValidateCoupon = async (): Promise<void> => {
-    if (!couponCode.trim()) return;
-    try {
-      const res = await apiClient.get(
-        `/Discounts/validate?code=${encodeURIComponent(couponCode.trim())}&saleTotal=${subtotal}`
-      );
-      const rule = res.data;
-      const amountText = rule.isPercentage ? `${rule.value}%` : `$${rule.value}`;
-      setCouponMessage({ severity: 'success', text: `Cupón válido: ${amountText} de descuento` });
-    } catch (err: any) {
-      setCouponMessage({ severity: 'error', text: err?.response?.data?.message || 'Cupón inválido' });
-    }
+  // The preview validates the coupon and applies it to the total.
+  const handleValidateCoupon = (): void => {
+    setAppliedCoupon(couponCode.trim());
   };
+
+  const couponDiscount = preview?.discounts.find((d) => d.reason.startsWith('Cupón'));
+  const couponMessage: { severity: 'success' | 'error'; text: string } | null = !appliedCoupon
+    ? null
+    : preview?.couponError
+      ? { severity: 'error', text: preview.couponError }
+      : couponDiscount
+        ? { severity: 'success', text: `Cupón aplicado: -$${couponDiscount.amount.toFixed(2)}` }
+        : null;
 
   const resetForm = (): void => {
     setCart([]);
     setCouponCode('');
-    setCouponMessage(null);
+    setAppliedCoupon('');
+    setPreview(null);
     setPayments([]);
     setCustomerId('');
   };
@@ -186,6 +240,19 @@ export function PosSalesWorkspace(): React.JSX.Element {
       setError('Agregue al menos un producto al carrito.');
       return;
     }
+    if (!preview || previewError) {
+      setError(previewError || 'Calculando el total, intenta de nuevo.');
+      return;
+    }
+    if (preview.couponError) {
+      setError(preview.couponError);
+      return;
+    }
+    // Full payment is required.
+    if (totalReceived + 0.005 < preview.total) {
+      setError(`Pago insuficiente: faltan $${(preview.total - totalReceived).toFixed(2)}.`);
+      return;
+    }
     setError(null);
     setCashierDialogOpen(true);
   };
@@ -195,13 +262,10 @@ export function PosSalesWorkspace(): React.JSX.Element {
     setError(null);
     setSubmitting(true);
     try {
-      // Each line only asks for the amount received via that method. The amount actually
-      // applied toward the sale is whatever is still owed when that line is reached (in the
-      // order entered); anything beyond that is change. This is only an estimate against the
-      // pre-tax subtotal - the real total (with tax/discount) isn't known until the backend
-      // responds, so the receipt dialog recomputes the change shown to the customer from the
-      // actual returned total rather than trusting this estimate.
-      let remainingDue = subtotal;
+      // Each line only asks for the amount received via that method. The amount applied toward
+      // the sale is whatever is still owed when that line is reached (in the order entered);
+      // anything beyond that is change. Split against the server's total from the preview.
+      let remainingDue = amountDue;
       const paymentsPayload = payments
         .filter((p) => p.paymentMethodId !== '' && (parseFloat(p.receivedAmount) || 0) > 0)
         .map((p) => {
@@ -220,7 +284,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
       // Store, drawer session and cashier come from the cashier ticket on the server.
       const payload = {
         customerId: customerId ? Number(customerId) : undefined,
-        couponCode: couponCode.trim() || undefined,
+        couponCode: appliedCoupon || undefined,
         saleItems: cart.map((line) => ({
           productVariantId: line.productVariantId,
           quantity: line.quantity,
@@ -232,19 +296,16 @@ export function PosSalesWorkspace(): React.JSX.Element {
       const res = await apiClient.post<SaleResult>('/Sales', payload, { headers: { 'X-Cashier-Ticket': cashier.ticket } });
       const sale = res.data;
 
-      const storeName = register?.storeName ?? '';
-      const totalReceived = paymentsPayload.reduce((sum, p) => sum + p.receivedAmount, 0);
-      // Recomputed from the backend's actual total (tax/discount included) rather than the
-      // pre-submission subtotal estimate used to split the payment lines above.
-      const totalChange = Math.max(0, totalReceived - sale.total);
-
+      // The receipt shows what the server saved: its lines, totals and payments (with change).
       setCompletedSale({
         id: sale.id,
+        folio: sale.folio ?? undefined,
+        cashierName: cashier.employeeName,
         date: sale.date,
-        storeName,
-        items: cart.map((line) => ({
-          description: line.description,
-          sku: line.sku,
+        storeName: register?.storeName ?? '',
+        items: sale.saleItems.map((line) => ({
+          description: line.description ?? '',
+          sku: line.sku ?? '',
           unitPrice: line.unitPrice,
           quantity: line.quantity,
         })),
@@ -252,17 +313,17 @@ export function PosSalesWorkspace(): React.JSX.Element {
         taxTotal: sale.taxTotal,
         discountTotal: sale.discountTotal,
         total: sale.total,
-        payments: paymentsPayload.map((p) => ({
+        payments: sale.payments.map((p) => ({
           methodName: paymentMethods.find((m) => m.id === p.paymentMethodId)?.name ?? 'Pago',
           amount: p.amount,
-          receivedAmount: p.receivedAmount,
-          changeGiven: p.changeGiven,
+          receivedAmount: p.receivedAmount ?? undefined,
+          changeGiven: p.changeGiven ?? undefined,
         })),
-        totalReceived,
-        totalChange,
+        totalReceived: sale.payments.reduce((sum, p) => sum + (p.receivedAmount ?? p.amount), 0),
+        totalChange: sale.payments.reduce((sum, p) => sum + (p.changeGiven ?? 0), 0),
       });
       resetForm();
-      setToast(`Venta #${sale.id} registrada por ${cashier.employeeName}.`);
+      setToast(`Venta ${sale.folio ?? `#${sale.id}`} registrada por ${cashier.employeeName}.`);
       fetchCashStatus();
     } catch (err: any) {
       console.error('Failed to create sale', err);
@@ -398,14 +459,33 @@ export function PosSalesWorkspace(): React.JSX.Element {
 
                     <Divider />
 
-                    <PaymentMethodsPanel methods={paymentMethods} payments={payments} onChange={setPayments} amountDue={subtotal} />
+                    <PaymentMethodsPanel methods={paymentMethods} payments={payments} onChange={setPayments} amountDue={amountDue} />
 
                     <Divider />
 
-                    <Typography variant="h6">Subtotal: ${subtotal.toFixed(2)}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Impuestos y descuentos finales se calculan al confirmar la venta.
-                    </Typography>
+                    {previewError ? <Alert severity="error">{previewError}</Alert> : null}
+                    <Stack spacing={0.5}>
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="body2">Subtotal</Typography>
+                        <Typography variant="body2">${(preview?.subtotal ?? subtotal).toFixed(2)}</Typography>
+                      </Stack>
+                      {preview && preview.discountTotal > 0 ? (
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="body2">Descuentos</Typography>
+                          <Typography variant="body2">-${preview.discountTotal.toFixed(2)}</Typography>
+                        </Stack>
+                      ) : null}
+                      {preview && preview.taxTotal > 0 ? (
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="body2">{preview.priceIncludesTax ? 'Impuestos (incluidos)' : 'Impuestos'}</Typography>
+                          <Typography variant="body2">${preview.taxTotal.toFixed(2)}</Typography>
+                        </Stack>
+                      ) : null}
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="h6">Total</Typography>
+                        <Typography variant="h6">{preview ? `$${preview.total.toFixed(2)}` : '—'}</Typography>
+                      </Stack>
+                    </Stack>
 
                     <Button variant="contained" size="large" onClick={handleCharge} disabled={submitting}>
                       {submitting ? 'Procesando...' : 'Cobrar'}
@@ -470,7 +550,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
         <CashierSwitchDialog
           open={cashierDialogOpen}
           cashRegisterId={registerId}
-          amountDue={subtotal}
+          amountDue={amountDue}
           onAuthenticated={handleSubmit}
           onClose={() => setCashierDialogOpen(false)}
         />

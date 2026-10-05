@@ -33,6 +33,8 @@ export interface CompletedSalePayment {
 
 export interface CompletedSale {
   id: number;
+  folio?: string;
+  cashierName?: string;
   date: string;
   storeName: string;
   items: CompletedSaleLine[];
@@ -75,7 +77,8 @@ export function SaleReceiptDialog({ open, sale, onClose }: SaleReceiptDialogProp
             <Stack alignItems="center" spacing={0}>
               <Typography variant="subtitle1" fontWeight={700}>{sale.storeName}</Typography>
               <Typography variant="body2" color="text.secondary">
-                Venta #{sale.id} · {new Date(sale.date).toLocaleString('es-MX')}
+                Venta {sale.folio ?? `#${sale.id}`} · {new Date(sale.date).toLocaleString('es-MX')}
+                {sale.cashierName ? ` · Cajero: ${sale.cashierName}` : ''}
               </Typography>
             </Stack>
 
