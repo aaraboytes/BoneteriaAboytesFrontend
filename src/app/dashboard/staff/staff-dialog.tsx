@@ -129,6 +129,7 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
     const [username, setUsername] = React.useState('');
     const [email, setEmail] = React.useState('');
     const [password, setPassword] = React.useState('');
+    const [pin, setPin] = React.useState('');
     const [role, setRole] = React.useState('Empleado');
     const [specialty, setSpecialty] = React.useState('');
     const [baseConsultationFee, setBaseConsultationFee] = React.useState<number>(0);
@@ -161,6 +162,7 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
             setUsername(staff.username || staff.fullName.toLowerCase().replace(/\s+/g, ''));
             setEmail(staff.email);
             setPassword('');
+            setPin('');
             setRole(staff.role || 'Empleado');
             setSpecialty(staff.specialty || '');
             setBaseConsultationFee(staff.baseConsultationFee || 0);
@@ -177,6 +179,7 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
             setUsername('');
             setEmail('');
             setPassword('');
+            setPin('');
             setRole('Empleado');
             setSpecialty('');
             setBaseConsultationFee(0);
@@ -232,6 +235,7 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
             username: username.replace(/\s+/g, ''),
             email,
             password: password || undefined,
+            pin: pin || undefined,
             role,
             specialty,
             baseConsultationFee,
@@ -340,6 +344,15 @@ export function StaffDialog({ open, staff, onClose, onSuccess }: StaffDialogProp
                                 {!isEditMode && (
                                     <TextField label="Password" type="password" fullWidth value={password} onChange={(e) => setPassword(e.target.value)} helperText="Required for new staff to log in." />
                                 )}
+                                <TextField
+                                    label="PIN de cajero (opcional)"
+                                    type="password"
+                                    fullWidth
+                                    value={pin}
+                                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    inputProps={{ inputMode: 'numeric' }}
+                                    helperText={isEditMode ? '4 a 6 dígitos para cobrar rápido. Déjalo vacío para no cambiarlo.' : '4 a 6 dígitos para identificarse rápido al cobrar.'}
+                                />
                                 <Stack direction="row" spacing={2}>
                                     <TextField select label="Rol de Usuario" fullWidth value={role} onChange={(e) => setRole(e.target.value)}>
                                         <MenuItem value="Administrador">Administrador</MenuItem>

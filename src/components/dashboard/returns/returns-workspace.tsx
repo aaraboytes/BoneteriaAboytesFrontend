@@ -17,6 +17,7 @@ import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import Divider from '@mui/material/Divider';
 import apiClient from '@/lib/api-client';
+import { getSelectedCashRegisterId } from '@/lib/pos/cash-register-storage';
 
 interface SaleItem {
   id: string;
@@ -102,11 +103,19 @@ export function ReturnsWorkspace(): React.JSX.Element {
       return;
     }
 
+    // The refund is paid out of this device's drawer (chosen on the POS screen).
+    const cashRegisterId = getSelectedCashRegisterId();
+    if (!cashRegisterId) {
+      setSubmitError('Selecciona una caja en Punto de Venta antes de registrar devoluciones.');
+      return;
+    }
+
     setSubmitError(null);
     setSubmitting(true);
     try {
       const res = await apiClient.post<ReturnResult>('/SaleReturns', {
         saleId: sale.id,
+        cashRegisterId,
         reason: reason.trim() || undefined,
         items,
       });

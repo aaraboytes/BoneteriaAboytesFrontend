@@ -14,7 +14,7 @@ import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import apiClient from '@/lib/api-client';
-import { useUser } from '@/hooks/use-user';
+import { getSelectedCashRegisterId, setSelectedCashRegisterId } from '@/lib/pos/cash-register-storage';
 
 import { ProductSearchField, type VariantOption } from './product-search-field';
 import { CartTable, type CartLine } from './cart-table';
@@ -23,16 +23,20 @@ import { SaleReceiptDialog, type CompletedSale } from './sale-receipt-dialog';
 import { CashOpeningDialog } from './cash-opening-dialog';
 import { CashMovementDialog } from './cash-movement-dialog';
 import { CashClosingDialog } from './cash-closing-dialog';
+import { CashierSwitchDialog, type CashierTicket } from './cashier-switch-dialog';
 
-interface StoreOption {
+interface CashRegisterOption {
   id: number;
   name: string;
+  storeId: number;
+  storeName: string;
 }
 
 interface CashStatus {
   hasOpenSession: boolean;
   requiresPriorClosing: boolean;
-  session: { id: number; openedAt: string; openingAmount: number } | null;
+  session: { id: number; openedAt: string; openedBy: string | null; openingAmount: number } | null;
+  cashInDrawer: number | null;
 }
 
 interface SaleResult {
@@ -45,10 +49,10 @@ interface SaleResult {
 }
 
 export function PosSalesWorkspace(): React.JSX.Element {
-  const { user } = useUser();
-
-  const [stores, setStores] = React.useState<StoreOption[]>([]);
-  const [storeId, setStoreId] = React.useState<number | ''>('');
+  // Several cashiers share this device's drawer; each identifies before charging (cashier switch).
+  const [registers, setRegisters] = React.useState<CashRegisterOption[]>([]);
+  const [registerId, setRegisterId] = React.useState<number | ''>('');
+  const [cashierDialogOpen, setCashierDialogOpen] = React.useState(false);
   const [customerId, setCustomerId] = React.useState('');
   const [cart, setCart] = React.useState<CartLine[]>([]);
   const [couponCode, setCouponCode] = React.useState('');
@@ -70,18 +74,22 @@ export function PosSalesWorkspace(): React.JSX.Element {
     setToast(message);
   };
 
-  const employeeId = typeof user?.id === 'number' ? user.id : undefined;
+  const register = registers.find((r) => r.id === registerId);
+  const storeId = register?.storeId ?? '';
+  const registerLabel = register ? `${register.name} · ${register.storeName}` : '';
 
   React.useEffect(() => {
     (async () => {
       try {
-        const res = await apiClient.get('/Stores');
+        const res = await apiClient.get<CashRegisterOption[]>('/CashRegisters');
         if (Array.isArray(res.data)) {
-          setStores(res.data);
-          if (res.data.length > 0) setStoreId(res.data[0].id);
+          setRegisters(res.data);
+          const remembered = getSelectedCashRegisterId();
+          const initial = res.data.find((r) => r.id === remembered) ?? res.data[0];
+          if (initial) setRegisterId(initial.id);
         }
       } catch (err) {
-        console.error('Failed to fetch stores', err);
+        console.error('Failed to fetch cash registers', err);
       }
     })();
 
@@ -96,12 +104,12 @@ export function PosSalesWorkspace(): React.JSX.Element {
   }, []);
 
   const fetchCashStatus = React.useCallback(async (): Promise<void> => {
-    if (!storeId) return;
+    if (!registerId) return;
     setCashStatusLoading(true);
     try {
-      const res = await apiClient.get<CashStatus>('/CashRegister/status', { params: { storeId } });
+      const res = await apiClient.get<CashStatus>('/CashSessions/current', { params: { cashRegisterId: registerId } });
       setCashStatus(res.data);
-      // Prompt for an opening automatically the first time this store is found to need one
+      // Prompt for an opening automatically the first time this drawer is found to need one
       // (page load, or switching to it); the user can dismiss it and reopen later via the
       // blocking panel's button, but they still can't transact until it's actually done.
       setOpeningDialogOpen(!res.data.hasOpenSession && !res.data.requiresPriorClosing);
@@ -110,7 +118,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
     } finally {
       setCashStatusLoading(false);
     }
-  }, [storeId]);
+  }, [registerId]);
 
   React.useEffect(() => {
     fetchCashStatus();
@@ -169,16 +177,21 @@ export function PosSalesWorkspace(): React.JSX.Element {
     setCustomerId('');
   };
 
-  const handleSubmit = async (): Promise<void> => {
-    if (!storeId) {
-      setError('Seleccione una sucursal.');
+  const handleCharge = (): void => {
+    if (!registerId) {
+      setError('Seleccione una caja.');
       return;
     }
     if (cart.length === 0) {
       setError('Agregue al menos un producto al carrito.');
       return;
     }
+    setError(null);
+    setCashierDialogOpen(true);
+  };
 
+  const handleSubmit = async (cashier: CashierTicket): Promise<void> => {
+    setCashierDialogOpen(false);
     setError(null);
     setSubmitting(true);
     try {
@@ -204,10 +217,9 @@ export function PosSalesWorkspace(): React.JSX.Element {
           };
         });
 
+      // Store, drawer session and cashier come from the cashier ticket on the server.
       const payload = {
-        storeId,
         customerId: customerId ? Number(customerId) : undefined,
-        employeeId,
         couponCode: couponCode.trim() || undefined,
         saleItems: cart.map((line) => ({
           productVariantId: line.productVariantId,
@@ -217,10 +229,10 @@ export function PosSalesWorkspace(): React.JSX.Element {
         payments: paymentsPayload,
       };
 
-      const res = await apiClient.post<SaleResult>('/Sales', payload);
+      const res = await apiClient.post<SaleResult>('/Sales', payload, { headers: { 'X-Cashier-Ticket': cashier.ticket } });
       const sale = res.data;
 
-      const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
+      const storeName = register?.storeName ?? '';
       const totalReceived = paymentsPayload.reduce((sum, p) => sum + p.receivedAmount, 0);
       // Recomputed from the backend's actual total (tax/discount included) rather than the
       // pre-submission subtotal estimate used to split the payment lines above.
@@ -250,6 +262,8 @@ export function PosSalesWorkspace(): React.JSX.Element {
         totalChange,
       });
       resetForm();
+      setToast(`Venta #${sale.id} registrada por ${cashier.employeeName}.`);
+      fetchCashStatus();
     } catch (err: any) {
       console.error('Failed to create sale', err);
       setError(err?.response?.data?.message || 'Error al procesar la venta.');
@@ -262,14 +276,22 @@ export function PosSalesWorkspace(): React.JSX.Element {
     }
   };
 
-  const selectedStoreName = stores.find((s) => s.id === storeId)?.name ?? '';
   const canTransact = cashStatus?.hasOpenSession ?? false;
 
   return (
     <Box sx={{ flexGrow: 1 }}>
       <Stack spacing={3}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ sm: 'center' }}>
-          <Typography variant="h4">Punto de Venta</Typography>
+          <Stack spacing={0.5}>
+            <Typography variant="h4">Punto de Venta</Typography>
+            {canTransact && cashStatus?.session ? (
+              <Typography variant="body2" color="text.secondary">
+                {registerLabel} · abierta {new Date(cashStatus.session.openedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                {cashStatus.session.openedBy ? ` por ${cashStatus.session.openedBy}` : ''}
+                {cashStatus.cashInDrawer != null ? ` · Efectivo en caja: $${cashStatus.cashInDrawer.toFixed(2)}` : ''}
+              </Typography>
+            ) : null}
+          </Stack>
           {canTransact ? (
             <Stack direction="row" spacing={1}>
               <Button variant="outlined" onClick={() => setMovementDialogOpen(true)}>
@@ -285,14 +307,19 @@ export function PosSalesWorkspace(): React.JSX.Element {
         <Stack direction="row" spacing={2}>
           <TextField
             select
-            label="Sucursal"
-            value={storeId}
-            onChange={(e) => setStoreId(Number(e.target.value))}
-            sx={{ width: 220 }}
+            label="Caja"
+            value={registerId}
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              setRegisterId(id);
+              setSelectedCashRegisterId(id);
+              setCart([]);
+            }}
+            sx={{ width: 280 }}
           >
-            {stores.map((store) => (
-              <MenuItem key={store.id} value={store.id}>
-                {store.name}
+            {registers.map((r) => (
+              <MenuItem key={r.id} value={r.id}>
+                {r.name} · {r.storeName}
               </MenuItem>
             ))}
           </TextField>
@@ -324,8 +351,8 @@ export function PosSalesWorkspace(): React.JSX.Element {
                 </Typography>
                 <Typography variant="body2" color="text.secondary" textAlign="center">
                   {cashStatus?.requiresPriorClosing
-                    ? 'Debes cerrar la caja pendiente antes de continuar registrando ventas en esta sucursal.'
-                    : 'Debes abrir la caja registradora antes de registrar ventas en esta sucursal.'}
+                    ? 'Debes cerrar la caja pendiente antes de continuar registrando ventas.'
+                    : 'Debes abrir la caja registradora antes de registrar ventas.'}
                 </Typography>
                 {!cashStatus?.requiresPriorClosing && !openingDialogOpen ? (
                   <Button variant="contained" onClick={() => setOpeningDialogOpen(true)} sx={{ mt: 1 }}>
@@ -380,7 +407,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
                       Impuestos y descuentos finales se calculan al confirmar la venta.
                     </Typography>
 
-                    <Button variant="contained" size="large" onClick={handleSubmit} disabled={submitting}>
+                    <Button variant="contained" size="large" onClick={handleCharge} disabled={submitting}>
                       {submitting ? 'Procesando...' : 'Cobrar'}
                     </Button>
                   </Stack>
@@ -391,35 +418,32 @@ export function PosSalesWorkspace(): React.JSX.Element {
         )}
       </Stack>
 
-      {storeId && cashStatus && !cashStatus.hasOpenSession && !cashStatus.requiresPriorClosing ? (
+      {registerId && cashStatus && !cashStatus.hasOpenSession && !cashStatus.requiresPriorClosing ? (
         <CashOpeningDialog
           open={openingDialogOpen}
-          storeId={storeId}
-          storeName={selectedStoreName}
-          employeeId={employeeId}
+          cashRegisterId={registerId}
+          registerLabel={registerLabel}
           onOpened={fetchCashStatus}
           onClose={() => setOpeningDialogOpen(false)}
         />
       ) : null}
 
-      {storeId && cashStatus?.requiresPriorClosing && cashStatus.session ? (
+      {registerId && cashStatus?.requiresPriorClosing && cashStatus.session ? (
         <CashClosingDialog
           open
           forced
           sessionId={cashStatus.session.id}
-          storeName={selectedStoreName}
-          employeeId={employeeId}
+          registerLabel={registerLabel}
           onClose={() => {}}
           onClosed={fetchCashStatus}
         />
       ) : null}
 
-      {storeId && cashStatus?.session ? (
+      {registerId && cashStatus?.session && !cashStatus.requiresPriorClosing ? (
         <CashClosingDialog
           open={closingDialogOpen}
           sessionId={cashStatus.session.id}
-          storeName={selectedStoreName}
-          employeeId={employeeId}
+          registerLabel={registerLabel}
           onClose={() => setClosingDialogOpen(false)}
           onClosed={() => {
             setClosingDialogOpen(false);
@@ -428,16 +452,27 @@ export function PosSalesWorkspace(): React.JSX.Element {
         />
       ) : null}
 
-      {storeId ? (
+      {cashStatus?.session && canTransact ? (
         <CashMovementDialog
           open={movementDialogOpen}
-          storeId={storeId}
-          employeeId={employeeId}
+          sessionId={cashStatus.session.id}
+          cashInDrawer={cashStatus.cashInDrawer}
           onClose={() => setMovementDialogOpen(false)}
           onSuccess={(message) => {
             setMovementDialogOpen(false);
             handleSuccessMessage(message);
+            fetchCashStatus();
           }}
+        />
+      ) : null}
+
+      {registerId ? (
+        <CashierSwitchDialog
+          open={cashierDialogOpen}
+          cashRegisterId={registerId}
+          amountDue={subtotal}
+          onAuthenticated={handleSubmit}
+          onClose={() => setCashierDialogOpen(false)}
         />
       ) : null}
 

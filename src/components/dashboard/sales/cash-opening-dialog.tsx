@@ -14,14 +14,14 @@ import apiClient from '@/lib/api-client';
 
 export interface CashOpeningDialogProps {
   open: boolean;
-  storeId: number;
-  storeName: string;
-  employeeId?: number;
+  cashRegisterId: number;
+  /** e.g. "Caja 1 · Tienda Principal" */
+  registerLabel: string;
   onOpened: () => void;
   onClose: () => void;
 }
 
-export function CashOpeningDialog({ open, storeId, storeName, employeeId, onOpened, onClose }: CashOpeningDialogProps): React.JSX.Element {
+export function CashOpeningDialog({ open, cashRegisterId, registerLabel, onOpened, onClose }: CashOpeningDialogProps): React.JSX.Element {
   const [amount, setAmount] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -43,7 +43,7 @@ export function CashOpeningDialog({ open, storeId, storeName, employeeId, onOpen
     setSubmitting(true);
     setError(null);
     try {
-      await apiClient.post('/CashRegister/open', { storeId, openingAmount, employeeId });
+      await apiClient.post('/CashSessions/open', { cashRegisterId, openingAmount });
       onOpened();
     } catch (err: any) {
       setError(err?.response?.data?.message || 'No se pudo abrir la caja.');
@@ -58,10 +58,10 @@ export function CashOpeningDialog({ open, storeId, storeName, employeeId, onOpen
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            Sucursal: <strong>{storeName}</strong>
+            Caja: <strong>{registerLabel}</strong>
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Debes abrir la caja antes de registrar ventas en esta sucursal.
+            Debes abrir la caja antes de registrar ventas. Varios cajeros pueden usarla; cada uno se identifica al cobrar.
           </Typography>
           <TextField
             label="Monto inicial en caja"
