@@ -35,7 +35,7 @@ export interface ProductVariant {
   sku?: string;
   size?: { id: number; name: string } | string | null;
   color?: { id: number; name: string } | string | null;
-  inventory?: { stockQuantity: number } | null;
+  inventories?: Array<{ storeId: number; stockQuantity: number }> | null;
   barcodes?: Array<{ barcode: string }> | string[] | null;
 }
 
@@ -126,10 +126,13 @@ function getStock(p: Product): number {
     let sum = 0;
     let hasInventory = false;
     p.variants.forEach((v) => {
-      if (v.inventory && typeof v.inventory.stockQuantity === 'number') {
-        sum += v.inventory.stockQuantity;
-        hasInventory = true;
-      }
+      // Stock is per store; the products list shows the total across all stores.
+      v.inventories?.forEach((inv) => {
+        if (typeof inv.stockQuantity === 'number') {
+          sum += inv.stockQuantity;
+          hasInventory = true;
+        }
+      });
     });
     if (hasInventory) return sum;
   }

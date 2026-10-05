@@ -80,7 +80,8 @@ export default function InventoryPage(): React.JSX.Element {
             color: v?.color?.name || 'N/A',
             price: p.price,
             cost: p.cost,
-            stockQuantity: v?.inventory?.stockQuantity ?? 10,
+            stockQuantity:
+              v?.inventories?.find((inv: any) => inv.storeId === storeId)?.stockQuantity ?? 0,
             barcodes: v?.barcodes ? v.barcodes.map((b: any) => b.barcode) : [],
             mapLocation: p.mapLocation && Array.isArray(p.mapLocation) ? p.mapLocation : [],
           };
