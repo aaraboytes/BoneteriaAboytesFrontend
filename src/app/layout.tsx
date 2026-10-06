@@ -1,4 +1,5 @@
 import * as React from 'react';
+import InitColorSchemeScript from '@mui/material/InitColorSchemeScript';
 import type { Viewport } from 'next';
 
 import '@/styles/global.css';
@@ -15,8 +16,9 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps): React.JSX.Element {
   return (
-    <html lang="en">
+    <html lang="es" suppressHydrationWarning>
       <body>
+        <InitColorSchemeScript attribute="class" defaultMode="light" />
         <LocalizationProvider>
           <UserProvider>
             <ThemeProvider>{children}</ThemeProvider>

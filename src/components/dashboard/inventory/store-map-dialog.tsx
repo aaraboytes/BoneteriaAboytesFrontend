@@ -338,11 +338,11 @@ export function StoreMapDialog({
 
       <Divider />
 
-      <DialogContent sx={{ p: 2.5, bgcolor: '#f8fafc' }}>
+      <DialogContent sx={{ p: 2.5, bgcolor: 'background.default' }}>
         <Grid container spacing={2.5} sx={{ height: '100%' }}>
           {/* Main Visual Interactive Map Section */}
           <Grid size={{ xs: 12, md: 8 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: '#ffffff', height: '100%', minHeight: 560, position: 'relative' }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: 'background.paper', height: '100%', minHeight: 560, position: 'relative' }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
                 <Stack direction="row" alignItems="center" spacing={1}>
                   <PinIcon size={20} color="#2563eb" weight="bold" />
@@ -386,9 +386,9 @@ export function StoreMapDialog({
                   width: '100%',
                   height: 520,
                   overflow: 'hidden',
-                  border: '2px dashed #e2e8f0',
+                  border: '2px dashed var(--mui-palette-divider)',
                   borderRadius: 2.5,
-                  bgcolor: '#fafafa',
+                  bgcolor: 'background.default',
                   p: 2,
                   display: 'flex',
                   alignItems: 'center',
@@ -407,7 +407,7 @@ export function StoreMapDialog({
                     zIndex: 20,
                     borderRadius: 2,
                     p: 0.5,
-                    bgcolor: 'rgba(255,255,255,0.92)',
+                    bgcolor: 'rgba(var(--mui-palette-background-paperChannel) / 0.92)',
                     backdropFilter: 'blur(6px)',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                   }}
@@ -497,12 +497,12 @@ export function StoreMapDialog({
                               ? '#6366f1'
                               : '#475569',
                             bgcolor: isHoveredProductZone
-                              ? '#dbeafe'
+                              ? 'action.selected'
                               : isSelectedZone
-                              ? '#d1fae5'
+                              ? 'rgba(var(--mui-palette-success-mainChannel) / 0.22)'
                               : isHoveredZone
-                              ? '#e0e7ff'
-                              : '#f8fafc',
+                              ? 'rgba(var(--mui-palette-info-mainChannel) / 0.2)'
+                              : 'background.paper',
                             boxShadow: highlighted ? '0 6px 20px rgba(37,99,235,0.35)' : '0 2px 4px rgba(0,0,0,0.04)',
                             transform: highlighted ? 'scale(1.05)' : 'scale(1)',
                             display: 'flex',
@@ -527,9 +527,9 @@ export function StoreMapDialog({
                               fontWeight={800}
                               color={
                                 isHoveredProductZone
-                                  ? '#1e40af'
+                                  ? 'primary.main'
                                   : isSelectedZone
-                                  ? '#065f46'
+                                  ? 'success.main'
                                   : 'text.primary'
                               }
                               sx={{ fontSize: 15, textAlign: 'center', px: 1 }}
@@ -556,7 +556,7 @@ export function StoreMapDialog({
 
           {/* Interactive Products List Sidebar with 25 per page Pagination */}
           <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: '#ffffff', height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, bgcolor: 'background.paper', height: '100%', display: 'flex', flexDirection: 'column' }}>
               <Stack spacing={1.5} mb={2}>
                 <Stack direction="row" alignItems="center" justifyContent="space-between">
                   <Typography variant="subtitle2" fontWeight={800}>
@@ -616,12 +616,12 @@ export function StoreMapDialog({
                           p: 1.5,
                           borderRadius: 2,
                           cursor: 'pointer',
-                          bgcolor: isHovered ? '#eff6ff' : 'background.paper',
+                          bgcolor: isHovered ? 'action.selected' : 'background.paper',
                           borderColor: isHovered ? '#2563eb' : 'divider',
                           borderWidth: isHovered ? 2 : 1,
                           transition: 'all 0.15s ease-in-out',
                           '&:hover': {
-                            bgcolor: '#f0f9ff',
+                            bgcolor: 'action.hover',
                             borderColor: '#3b82f6',
                           },
                         }}
@@ -703,7 +703,7 @@ export function StoreMapDialog({
         </Grid>
       </DialogContent>
 
-      <DialogActions sx={{ p: 2, px: 3, bgcolor: '#f8fafc' }}>
+      <DialogActions sx={{ p: 2, px: 3, bgcolor: 'background.default' }}>
         <Button variant="contained" onClick={onClose} sx={{ borderRadius: 2, fontWeight: 700 }}>
           Cerrar Mapa
         </Button>

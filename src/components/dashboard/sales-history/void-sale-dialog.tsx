@@ -91,7 +91,7 @@ export function VoidSaleDialog({ open, sale, onClose, onVoided }: VoidSaleDialog
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={submitting}>
-          Cerrar
+          Volver
         </Button>
         <Button variant="contained" color="error" onClick={handleSubmit} disabled={submitting}>
           {submitting ? 'Cancelando...' : 'Cancelar venta'}

@@ -20,7 +20,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
+import { useActiveTheme } from '@/styles/theme/use-active-theme';
 import type { ApexOptions } from 'apexcharts';
 
 import apiClient from '@/lib/api-client';
@@ -96,7 +96,7 @@ function ShareTable({ rows, countLabel }: { rows: AmountRow[]; countLabel: strin
 }
 
 export function DailyReportView(): React.JSX.Element {
-  const theme = useTheme();
+  const theme = useActiveTheme();
   const [stores, setStores] = React.useState<StoreOption[]>([]);
   const [storeId, setStoreId] = React.useState<number | ''>('');
   const [date, setDate] = React.useState('');

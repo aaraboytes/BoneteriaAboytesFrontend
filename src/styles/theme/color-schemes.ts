@@ -6,7 +6,7 @@ import type { ColorScheme } from './types';
 export const colorSchemes = {
   dark: {
     palette: {
-      action: { disabledBackground: 'rgba(0, 0, 0, 0.12)' },
+      action: { disabledBackground: 'rgba(255, 255, 255, 0.12)' },
       background: {
         default: '#0f172a',
         defaultChannel: '15 23 42',
@@ -24,40 +24,41 @@ export const colorSchemes = {
         light: redOrange[300],
         main: redOrange[400],
         dark: redOrange[500],
-        contrastText: '#ffffff',
+        contrastText: '#0f172a',
       },
       info: {
         main: '#38bdf8',
         light: '#7dd3fc',
         dark: '#0284c7',
-        contrastText: '#ffffff',
+        contrastText: '#0f172a',
       },
       neutral: { ...nevada },
+      // Brand yellow as the accent in dark mode: the brand navy is the same colour as the dark surfaces.
       primary: {
-        main: '#1e2b49',
-        light: '#2f4068',
-        dark: '#121a2d',
-        contrastText: '#ffffff',
-      },
-      secondary: {
         main: '#fee263',
         light: '#ffe985',
         dark: '#e5c942',
         contrastText: '#1e2b49',
+      },
+      secondary: {
+        main: '#8da2d6',
+        light: '#a9b9e2',
+        dark: '#6b82bd',
+        contrastText: '#0f172a',
       },
       success: {
         ...kepple,
         light: kepple[300],
         main: kepple[400],
         dark: kepple[500],
-        contrastText: '#ffffff',
+        contrastText: '#0f172a',
       },
       text: {
         primary: '#f4f8fa',
         primaryChannel: '244 248 250',
         secondary: '#94a3b8',
         secondaryChannel: '148 163 184',
-        disabled: '#64748b',
+        disabled: '#7d8ba6',
       },
       warning: {
         ...california,

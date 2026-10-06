@@ -1,15 +1,16 @@
 import * as React from 'react';
 import type { Metadata } from 'next';
-import Box from '@mui/material/Box';
 
+import { config } from '@/config';
 import { ReturnsWorkspace } from '@/components/dashboard/returns/returns-workspace';
 
-export const metadata = { title: `Devoluciones | Dashboard | Store System` } satisfies Metadata;
+export const metadata = { title: `Devoluciones | Dashboard | ${config.site.name}` } satisfies Metadata;
 
 export default function Page(): React.JSX.Element {
+    // useSearchParams (the sale preselected from the sales history) needs a Suspense boundary.
     return (
-        <Box sx={{ p: 3 }}>
+        <React.Suspense fallback={null}>
             <ReturnsWorkspace />
-        </Box>
+        </React.Suspense>
     );
 }

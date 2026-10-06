@@ -62,8 +62,8 @@ function LayoutContent({ children }: LayoutProps): React.JSX.Element {
           }}
         >
           <MainNav />
-          <main>
-            <Container maxWidth="xl" sx={{ py: '64px' }}>
+          <main id="main-content">
+            <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 } }}>
               {children}
             </Container>
           </main>

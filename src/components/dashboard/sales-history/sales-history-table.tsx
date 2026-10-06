@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -14,6 +15,9 @@ import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
+import RouterLink from 'next/link';
+
+import { paths } from '@/paths';
 import apiClient from '@/lib/api-client';
 
 import { VoidSaleDialog } from './void-sale-dialog';
@@ -47,10 +51,12 @@ export function SalesHistoryTable(): React.JSX.Element {
   const [rowsPerPage, setRowsPerPage] = React.useState(25);
   const [voiding, setVoiding] = React.useState<SaleHistoryRow | null>(null);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [loadError, setLoadError] = React.useState(false);
 
   React.useEffect(() => {
     let active = true;
     setLoading(true);
+    setLoadError(false);
     (async () => {
       try {
         const res = await apiClient.get<SalesHistoryResponse>('/Sales/history', {
@@ -62,6 +68,7 @@ export function SalesHistoryTable(): React.JSX.Element {
         }
       } catch (err) {
         console.error('Failed to fetch sales history:', err);
+        if (active) setLoadError(true);
       } finally {
         if (active) setLoading(false);
       }
@@ -73,31 +80,44 @@ export function SalesHistoryTable(): React.JSX.Element {
 
   return (
     <Card>
+      {loadError ? (
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={() => setReloadKey((k) => k + 1)}>
+              Reintentar
+            </Button>
+          }
+          sx={{ m: 2 }}
+        >
+          No se pudo cargar el historial de ventas. Revisa tu conexión e inténtalo de nuevo.
+        </Alert>
+      ) : null}
       <Box sx={{ overflowX: 'auto' }}>
         <Table sx={{ minWidth: '800px' }}>
           <TableHead>
             <TableRow>
               <TableCell>Fecha</TableCell>
-              <TableCell align="right">No. Artículos</TableCell>
+              <TableCell align="right">Artículos</TableCell>
               <TableCell align="right">Total</TableCell>
               <TableCell align="right">Efectivo</TableCell>
               <TableCell align="right">Tarjeta</TableCell>
               <TableCell align="right">Transferencia</TableCell>
               <TableCell>Cajero</TableCell>
-              <TableCell align="right" />
+              <TableCell align="right"><span style={{ position: 'absolute', left: -9999 }}>Acciones</span></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
                 <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
-                  Cargando historial de ventas...
+                  Cargando ventas…
                 </TableCell>
               </TableRow>
-            ) : rows.length === 0 ? (
+            ) : loadError ? null : rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} align="center" sx={{ py: 3, color: 'text.secondary' }}>
-                  No se encontraron ventas.
+                  Aún no hay ventas registradas.
                 </TableCell>
               </TableRow>
             ) : (
@@ -123,9 +143,19 @@ export function SalesHistoryTable(): React.JSX.Element {
                   <TableCell align="right">{row.transferAmount > 0 ? `$${row.transferAmount.toFixed(2)}` : '-'}</TableCell>
                   <TableCell>{row.cashierName ?? '-'}</TableCell>
                   <TableCell align="right">
+                    {row.status === 'Completed' ? (
+                      <Button
+                        size="small"
+                        component={RouterLink}
+                        href={`${paths.dashboard.returns}?saleId=${row.id}`}
+                        aria-label={`Registrar devolución de la venta ${row.folio ?? `#${row.id}`}`}
+                      >
+                        Devolver
+                      </Button>
+                    ) : null}
                     {row.canVoid ? (
-                      <Button size="small" color="error" onClick={() => setVoiding(row)}>
-                        Cancelar
+                      <Button size="small" color="error" onClick={() => setVoiding(row)} aria-label={`Cancelar venta ${row.folio ?? `#${row.id}`}`}>
+                        Cancelar venta
                       </Button>
                     ) : null}
                   </TableCell>
@@ -146,6 +176,8 @@ export function SalesHistoryTable(): React.JSX.Element {
         page={page}
         rowsPerPage={rowsPerPage}
         rowsPerPageOptions={[10, 25, 50, 100]}
+        labelRowsPerPage="Ventas por página"
+        labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
       />
       <VoidSaleDialog
         open={voiding !== null}

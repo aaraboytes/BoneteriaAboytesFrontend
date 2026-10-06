@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { Box, Container, Stack, Typography, Alert, Button, Snackbar } from '@mui/material';
+import { Stack, Typography, Alert, Button, Snackbar } from '@mui/material';
 import apiClient from '@/lib/api-client';
+import { useUser } from '@/hooks/use-user';
 import { InventoryTable, InventoryItem } from '@/components/dashboard/inventory/inventory-table';
 import { StockTransferDialog } from '@/components/dashboard/inventory/stock-transfer-dialog';
 import { StockIntakeDialog } from '@/components/dashboard/inventory/stock-intake-dialog';
@@ -24,7 +25,9 @@ export interface StoreSimple {
 export default function InventoryPage(): React.JSX.Element {
   const [items, setItems] = React.useState<InventoryItem[]>([]);
   const [stores, setStores] = React.useState<StoreSimple[]>([]);
-  const [selectedStoreId, setSelectedStoreId] = React.useState<number>(1);
+  const { user } = useUser();
+  // 0 = not chosen yet: wait for the store list instead of assuming store 1 exists.
+  const [selectedStoreId, setSelectedStoreId] = React.useState<number>(0);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -45,16 +48,22 @@ export default function InventoryPage(): React.JSX.Element {
       const res = await apiClient.get('/Stores');
       if (Array.isArray(res.data) && res.data.length > 0) {
         setStores(res.data);
-        if (!selectedStoreId) {
-          setSelectedStoreId(res.data[0].id);
-        }
+        // Start on the user's own store when they have one.
+        const own = res.data.find((st: StoreSimple) => st.id === user?.storeId);
+        setSelectedStoreId((own ?? res.data[0]).id);
+      } else {
+        setLoading(false);
+        setError('No hay sucursales registradas todavía.');
       }
     } catch (err) {
       console.error('Failed to fetch stores', err);
+      setLoading(false);
+      setError('No se pudo cargar la lista de sucursales.');
     }
   };
 
   const fetchInventory = async (storeId: number = selectedStoreId) => {
+    if (!storeId) return;
     setLoading(true);
     setError(null);
 
@@ -90,7 +99,7 @@ export default function InventoryPage(): React.JSX.Element {
       }
     } catch (err) {
       console.error('Failed to fetch inventory from API', err);
-      setError('No se pudo conectar con el servidor backend PostgreSQL. Mostrando catálogo local.');
+      setError('No se pudo cargar el inventario de esta sucursal. Lo que ves puede estar desactualizado.');
     } finally {
       setLoading(false);
     }
@@ -140,8 +149,7 @@ export default function InventoryPage(): React.JSX.Element {
         });
       } catch (err: any) {
         console.error('Failed to adjust stock on backend', err);
-        setError(err?.response?.data?.message || 'No se pudo ajustar el inventario.');
-        return;
+        throw new Error(err?.response?.data?.message || 'No se pudo ajustar el inventario.');
       }
     }
 
@@ -154,8 +162,10 @@ export default function InventoryPage(): React.JSX.Element {
         cost: updatedItem.cost,
         mapLocation: updatedItem.mapLocation,
       });
-    } catch (err) {
+    } catch (err: any) {
+      // Throwing keeps the edit dialog open with the reason, instead of showing the change as saved.
       console.error('Failed to update product details on backend', err);
+      throw new Error(err?.response?.data?.message || 'No se pudieron guardar los datos del producto.');
     }
 
     // 3. Update local state
@@ -170,34 +180,28 @@ export default function InventoryPage(): React.JSX.Element {
   };
 
   return (
-    <Box
-      component="main"
-      sx={{
-        flexGrow: 1,
-        py: { xs: 2, sm: 4 },
-        px: { xs: 1.5, sm: 3, md: 4 },
-      }}
-    >
-      <Container maxWidth="xl">
-        <Stack spacing={3}>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={{ xs: 1.5, sm: 3 }}
-            justifyContent="space-between"
-            alignItems={{ xs: 'stretch', sm: 'center' }}
-          >
-            <Stack spacing={0.5}>
-              <Typography variant="h4" fontWeight={800} sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
-                Gestión De Inventarios & Stock
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Catálogo inteligente con selección de Sucursal / Tienda independiente, consulta de faltantes, ingreso y transferencia de productos.
-              </Typography>
-            </Stack>
-          </Stack>
+    <Stack spacing={3}>
+      <Stack spacing={0.5}>
+        <Typography variant="h4" component="h2" fontWeight={800} sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+          Inventario y Stock
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Existencias por sucursal. Ingresa mercancía, transfiérela entre tiendas o revisa qué falta.
+        </Typography>
+      </Stack>
 
           {error && (
-            <Alert severity="warning" onClose={() => setError(null)}>
+            <Alert
+              severity="warning"
+              onClose={() => setError(null)}
+              action={
+                selectedStoreId ? (
+                  <Button color="inherit" size="small" onClick={() => fetchInventory(selectedStoreId)}>
+                    Reintentar
+                  </Button>
+                ) : undefined
+              }
+            >
               {error}
             </Alert>
           )}
@@ -216,8 +220,6 @@ export default function InventoryPage(): React.JSX.Element {
             onOpenWithdrawal={() => setWithdrawalDialogOpen(true)}
             onOpenMissing={() => setMissingDialogOpen(true)}
           />
-        </Stack>
-      </Container>
 
       {/* Missing Products Dialog */}
       <MissingProductsDialog
@@ -270,7 +272,7 @@ export default function InventoryPage(): React.JSX.Element {
           {toast.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </Stack>
   );
 }
 

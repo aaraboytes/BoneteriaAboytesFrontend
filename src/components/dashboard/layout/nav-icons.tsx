@@ -19,6 +19,7 @@ import { Receipt as ReceiptIcon } from '@phosphor-icons/react/dist/ssr/Receipt';
 import { Truck as TruckIcon } from '@phosphor-icons/react/dist/ssr/Truck';
 import { ArrowCounterClockwise as ArrowCounterClockwiseIcon } from '@phosphor-icons/react/dist/ssr/ArrowCounterClockwise';
 import { ShieldCheck as ShieldCheckIcon } from '@phosphor-icons/react/dist/ssr/ShieldCheck';
+import { Pulse as PulseIcon } from '@phosphor-icons/react/dist/ssr/Pulse';
 
 export const navIcons = {
   'chart-pie': ChartPieIcon,
@@ -41,4 +42,6 @@ export const navIcons = {
   'receipt': ReceiptIcon,
   'arrow-counter-clockwise': ArrowCounterClockwiseIcon,
   'shield-check': ShieldCheckIcon,
+  'pulse': PulseIcon,
+  'activity': PulseIcon,
 } as Record<string, Icon>;

@@ -1,7 +1,7 @@
 {
   "description": "Manual section toggle flags for the POS & Inventory System. Set any section to true (enabled) or false (disabled).",
   "sections": {
-    "overview": false,
+    "overview": true,
     "sales": true,
     "salesHistory": true,
     "returns": true,
@@ -14,6 +14,7 @@
     "staff": true,
     "settings": true,
     "account": true,
+    "activity": true,
     "consultations": false,
     "appointments": false,
     "billing": false,

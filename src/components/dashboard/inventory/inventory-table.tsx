@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import {
+  Alert,
   Autocomplete,
   Badge,
   Box,
@@ -10,6 +11,7 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -123,6 +125,8 @@ export function InventoryTable({
   const [sizeFilter, setSizeFilter] = React.useState<string | null>(null);
   const [colorFilter, setColorFilter] = React.useState<string | null>(null);
   const [stockStatusFilter, setStockStatusFilter] = React.useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   // Edit Product Modal State
   const [editItem, setEditItem] = React.useState<InventoryItem | null>(null);
@@ -424,6 +428,7 @@ export function InventoryTable({
   const handleOpenEdit = (item: InventoryItem) => {
     setEditItem(item);
     setEditTab(0);
+    setSaveError(null);
     setEditForm({
       description: item.description || '',
       price: item.price || 0,
@@ -443,6 +448,7 @@ export function InventoryTable({
   const handleSaveProduct = async () => {
     if (!editItem) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const updatedItem: InventoryItem = {
         ...editItem,
@@ -466,8 +472,9 @@ export function InventoryTable({
         await onAdjustStock(editItem.productVariantId, Number(editForm.stockQuantity));
       }
       setEditItem(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to update product', e);
+      setSaveError(e?.message || 'No se pudo guardar. Inténtalo de nuevo.');
     } finally {
       setSaving(false);
     }
@@ -484,115 +491,61 @@ export function InventoryTable({
             {/* Store Selector Dropdown */}
             {stores.length > 0 && (
               <FormControl size="small" sx={{ minWidth: 260, width: { xs: '100%', sm: 'auto' } }}>
-                <InputLabel id="store-select-label">🏢 Sucursal / Tienda</InputLabel>
+                <InputLabel id="store-select-label">Sucursal</InputLabel>
                 <Select
                   labelId="store-select-label"
                   value={selectedStoreId ?? (stores[0]?.id || 1)}
-                  label="🏢 Sucursal / Tienda"
+                  label="Sucursal"
                   onChange={(e) => onStoreChange && onStoreChange(Number(e.target.value))}
                   sx={{ borderRadius: 2, bgcolor: 'background.paper', fontWeight: 700 }}
                 >
                   {stores.map((s) => (
                     <MenuItem key={s.id} value={s.id}>
-                      🏢 {s.name} ({s.code || `SUC-${s.id}`})
+                      {s.name} ({s.code || `SUC-${s.id}`})
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
             )}
 
-            <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" sx={{ gap: 1 }}>
-              <Button
-                variant="contained"
-                color="primary"
-                size="small"
-                startIcon={<MapIcon size={18} weight="bold" />}
-                onClick={() => setMapDialogOpen(true)}
-                sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
-              >
-                Mapa
-              </Button>
-              {onOpenMissing && (
-                <Button
-                  variant="contained"
-                  color="error"
-                  size="small"
-                  startIcon={<WarningIcon size={18} />}
-                  onClick={onOpenMissing}
-                  sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
-                >
-                  Faltantes
-                </Button>
-              )}
-
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
               {onOpenIntake && (
-                <Button
-                  variant="contained"
-                  color="success"
-                  size="small"
-                  startIcon={<PlusIcon size={18} />}
-                  onClick={onOpenIntake}
-                  sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
-                >
-                  Ingresar
+                <Button variant="contained" size="medium" startIcon={<PlusIcon size={18} />} onClick={onOpenIntake} sx={{ borderRadius: 2, fontWeight: 700 }}>
+                  Ingresar mercancía
                 </Button>
               )}
-
-              {onOpenWithdrawal && (
-                <Button
-                  variant="contained"
-                  color="error"
-                  size="small"
-                  startIcon={<MinusIcon size={18} />}
-                  onClick={onOpenWithdrawal}
-                  sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
-                >
-                  Retirar
-                </Button>
-              )}
-
               {onOpenTransfer && (
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  size="small"
-                  startIcon={<TransferIcon size={18} />}
-                  onClick={onOpenTransfer}
-                  sx={{ borderRadius: 2, fontWeight: 700, whitespace: 'nowrap' }}
-                >
+                <Button variant="outlined" startIcon={<TransferIcon size={18} />} onClick={onOpenTransfer} sx={{ borderRadius: 2 }}>
                   Transferir
                 </Button>
               )}
-
-              {activeFiltersCount > 0 && (
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  size="small"
-                  startIcon={<ClearIcon />}
-                  onClick={handleClearFilters}
-                  sx={{ borderRadius: 2, whitespace: 'nowrap' }}
-                >
-                  Limpiar Filtros ({activeFiltersCount})
+              {onOpenWithdrawal && (
+                <Button variant="outlined" color="error" startIcon={<MinusIcon size={18} />} onClick={onOpenWithdrawal} sx={{ borderRadius: 2 }}>
+                  Retirar
                 </Button>
               )}
-
-              {onRefresh && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<RefreshIcon size={18} className={loading ? 'spin' : ''} />}
-                  onClick={onRefresh}
-                  disabled={loading}
-                  sx={{ borderRadius: 2, fontWeight: 600, whitespace: 'nowrap' }}
-                >
-                  Actualizar Inventario
+              {onOpenMissing && (
+                <Button variant="outlined" color="inherit" startIcon={<WarningIcon size={18} />} onClick={onOpenMissing} sx={{ borderRadius: 2 }}>
+                  Faltantes
                 </Button>
+              )}
+              <Button variant="outlined" color="inherit" startIcon={<MapIcon size={18} />} onClick={() => setMapDialogOpen(true)} sx={{ borderRadius: 2 }}>
+                Mapa
+              </Button>
+              {onRefresh && (
+                <Tooltip title="Actualizar inventario">
+                  <span>
+                    <IconButton aria-label="Actualizar inventario" onClick={onRefresh} disabled={loading}>
+                      <RefreshIcon size={20} className={loading ? 'spin' : ''} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
               )}
             </Stack>
           </Stack>
 
           {/* Global Autocomplete Search Bar (Full Width below store dropdown & buttons) */}
+          <Stack direction="row" spacing={1.5} alignItems="center">
           <Autocomplete
             freeSolo
             fullWidth
@@ -605,7 +558,8 @@ export function InventoryTable({
             renderInput={(params) => (
               <TextField
                 {...params}
-                placeholder="Buscar por Descripción, Proveedor, SKU, Código de Barras, Color, Talla..."
+                placeholder="Buscar por nombre, SKU, código de barras, proveedor, color o talla"
+                inputProps={{ ...params.inputProps, 'aria-label': 'Buscar en el inventario' }}
                 variant="outlined"
                 size="small"
                 InputProps={{
@@ -618,7 +572,7 @@ export function InventoryTable({
                   endAdornment: (
                     <>
                       {globalSearch && (
-                        <IconButton size="small" onClick={() => setGlobalSearch('')}>
+                        <IconButton size="small" aria-label="Borrar búsqueda" onClick={() => setGlobalSearch('')}>
                           <ClearIcon size={16} />
                         </IconButton>
                       )}
@@ -636,16 +590,25 @@ export function InventoryTable({
             )}
           />
 
-          {/* Dynamic Column Autocomplete Filters Section */}
+          <Button
+            variant={[providerFilter, genreFilter, modelFilter, sizeFilter, colorFilter, stockStatusFilter].some(Boolean) ? 'contained' : 'outlined'}
+            startIcon={<FilterIcon />}
+            onClick={() => setFiltersOpen((o) => !o)}
+            aria-expanded={filtersOpen}
+            sx={{ borderRadius: 2, whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            Filtros{[providerFilter, genreFilter, modelFilter, sizeFilter, colorFilter, stockStatusFilter].filter(Boolean).length > 0 ? ` (${[providerFilter, genreFilter, modelFilter, sizeFilter, colorFilter, stockStatusFilter].filter(Boolean).length})` : ''}
+          </Button>
+          {activeFiltersCount > 0 && (
+            <Button variant="text" startIcon={<ClearIcon />} onClick={handleClearFilters} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              Limpiar
+            </Button>
+          )}
+          </Stack>
+
+          <Collapse in={filtersOpen || [providerFilter, genreFilter, modelFilter, sizeFilter, colorFilter, stockStatusFilter].some(Boolean)} unmountOnExit>
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: 'background.neutral' }}>
             <Stack spacing={1.5}>
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <FilterIcon size={18} color="var(--mui-palette-primary-main)" />
-                <Typography variant="subtitle2" fontWeight={700} color="primary">
-                  Filtros Inteligentes por Columna (Autocomplete)
-                </Typography>
-              </Stack>
-
               <Grid container spacing={1.5}>
                 {/* 1. Proveedor Autocomplete Filter */}
                 <Grid size={{ xs: 12, sm: 6, md: 2.2 }}>
@@ -732,15 +695,112 @@ export function InventoryTable({
                       setPage(0);
                     }}
                     renderInput={(params) => (
-                      <TextField {...params} label="Estado de Inventario" size="small" placeholder="Todos" variant="outlined" />
+                      <TextField {...params} label="Existencias" size="small" placeholder="Todos" variant="outlined" />
                     )}
                   />
                 </Grid>
               </Grid>
             </Stack>
           </Paper>
+          </Collapse>
         </Stack>
       </Card>
+
+      {/* Metrics Summary (3 Cards) */}
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: 'primary.alpha12',
+                    color: 'primary.main',
+                    display: 'flex',
+                  }}
+                >
+                  <PackageIcon size={28} />
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    Productos (SKU)
+                  </Typography>
+                  <Typography variant="h5" fontWeight={700}>
+                    {summaryMetrics.totalSkus.toLocaleString()}
+                  </Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: 'success.alpha12',
+                    color: 'success.main',
+                    display: 'flex',
+                  }}
+                >
+                  <CheckIcon size={28} />
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    UNIDADES EN INVENTARIO
+                  </Typography>
+                  <Typography variant="h5" fontWeight={700}>
+                    {summaryMetrics.totalUnits.toLocaleString()}
+                  </Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    bgcolor: 'warning.alpha12',
+                    color: 'warning.main',
+                    display: 'flex',
+                  }}
+                >
+                  <WarningIcon size={28} />
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    Poco stock (≤ 5) / Agotados
+                  </Typography>
+                  <Typography variant="h5" fontWeight={700} color={summaryMetrics.outOfStockCount > 0 ? 'error.main' : 'warning.main'}>
+                    {summaryMetrics.lowStockCount} / {summaryMetrics.outOfStockCount}
+                  </Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap role="group" aria-label="Filtrar por existencias" alignItems="center">
+        <Chip clickable aria-pressed={stockStatusFilter === null} label={`Todos (${summaryMetrics.totalSkus})`} color={stockStatusFilter === null ? 'primary' : 'default'} onClick={() => { setStockStatusFilter(null); setPage(0); }} />
+        <Chip clickable aria-pressed={stockStatusFilter === 'Poco Stock (1 - 5)'} label={`Poco stock (${summaryMetrics.lowStockCount})`} color={stockStatusFilter === 'Poco Stock (1 - 5)' ? 'warning' : 'default'} onClick={() => { setStockStatusFilter('Poco Stock (1 - 5)'); setPage(0); }} />
+        <Chip clickable aria-pressed={stockStatusFilter === 'Sin Stock (0)'} label={`Agotados (${summaryMetrics.outOfStockCount})`} color={stockStatusFilter === 'Sin Stock (0)' ? 'error' : 'default'} onClick={() => { setStockStatusFilter('Sin Stock (0)'); setPage(0); }} />
+        <Typography variant="body2" color="text.secondary" role="status" sx={{ ml: 1 }}>
+          {sortedItems.length === items.length ? `${items.length} artículos` : `${sortedItems.length} de ${items.length} artículos`}
+        </Typography>
+      </Stack>
 
       {/* Main Inventory Data Table */}
       <Card variant="outlined" sx={{ borderRadius: 2 }}>
@@ -764,7 +824,7 @@ export function InventoryTable({
                     direction={orderBy === 'description' ? order : 'asc'}
                     onClick={() => handleSort('description')}
                   >
-                    Descripción Base Del Producto
+                    Producto
                   </TableSortLabel>
                 </TableCell>
 
@@ -824,7 +884,7 @@ export function InventoryTable({
                     direction={orderBy === 'price' ? order : 'asc'}
                     onClick={() => handleSort('price')}
                   >
-                    Precio Unitario
+                    Precio
                   </TableSortLabel>
                 </TableCell>
 
@@ -834,13 +894,13 @@ export function InventoryTable({
                     direction={orderBy === 'stockQuantity' ? order : 'asc'}
                     onClick={() => handleSort('stockQuantity')}
                   >
-                    Stock / Existencia
+                    Existencias
                   </TableSortLabel>
                 </TableCell>
 
                 <TableCell style={{ width: '12%' }}>
                   <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase' }}>
-                    Ubicación en Mapa
+                    Ubicación
                   </Typography>
                 </TableCell>
 
@@ -857,7 +917,7 @@ export function InventoryTable({
                     <Stack spacing={2} alignItems="center">
                       <CircularProgress size={40} />
                       <Typography variant="body2" color="text.secondary">
-                        Cargando catálogo e inventario completo...
+                        Cargando inventario…
                       </Typography>
                     </Stack>
                   </TableCell>
@@ -868,14 +928,14 @@ export function InventoryTable({
                     <Stack spacing={1.5} alignItems="center">
                       <PackageIcon size={48} color="var(--mui-palette-text-disabled)" />
                       <Typography variant="h6" color="text.secondary">
-                        No se encontraron artículos de inventario.
+                        No hay artículos que coincidan.
                       </Typography>
                       <Typography variant="body2" color="text.disabled">
-                        Intenta ajustar o limpiar los filtros de búsqueda.
+                        Prueba con otra búsqueda o quita los filtros.
                       </Typography>
                       {activeFiltersCount > 0 && (
                         <Button variant="outlined" size="small" onClick={handleClearFilters} sx={{ mt: 1 }}>
-                          Limpiar Todos los Filtros
+                          Quitar filtros
                         </Button>
                       )}
                     </Stack>
@@ -894,7 +954,7 @@ export function InventoryTable({
                       onMouseLeave={() => setHoveredItem(null)}
                       sx={{
                         transition: 'background-color 0.15s',
-                        bgcolor: hoveredItem?.productVariantId === item.productVariantId ? '#eff6ff' : 'inherit',
+                        bgcolor: hoveredItem?.productVariantId === item.productVariantId ? 'action.hover' : 'inherit',
                       }}
                     >
                       <TableCell>
@@ -996,7 +1056,7 @@ export function InventoryTable({
 
                       <TableCell align="center">
                         <Chip
-                          label={isOut ? 'Agotado (0)' : isLow ? `Poco Stock (${item.stockQuantity})` : `${item.stockQuantity} unid.`}
+                          label={isOut ? 'Agotado' : isLow ? `Poco stock · ${item.stockQuantity}` : `${item.stockQuantity} unid.`}
                           color={isOut ? 'error' : isLow ? 'warning' : 'success'}
                           variant={isOut ? 'filled' : 'outlined'}
                           size="small"
@@ -1025,8 +1085,8 @@ export function InventoryTable({
                       </TableCell>
 
                       <TableCell align="right">
-                        <Tooltip title="Editar Producto y Existencias">
-                          <IconButton size="small" color="primary" onClick={() => handleOpenEdit(item)}>
+                        <Tooltip title="Editar producto y existencias">
+                          <IconButton size="small" color="primary" aria-label={`Editar ${item.description}`} onClick={() => handleOpenEdit(item)}>
                             <EditIcon size={18} />
                           </IconButton>
                         </Tooltip>
@@ -1050,97 +1110,10 @@ export function InventoryTable({
             setRowsPerPage(parseInt(event.target.value, 10));
             setPage(0);
           }}
-          labelRowsPerPage="Filas por página:"
+          labelRowsPerPage="Artículos por página:"
           labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`}
         />
       </Card>
-
-      {/* Metrics Summary Below Table (3 Cards) */}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    bgcolor: 'primary.alpha12',
-                    color: 'primary.main',
-                    display: 'flex',
-                  }}
-                >
-                  <PackageIcon size={28} />
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    TOTAL PRODUCTOS / SKUS
-                  </Typography>
-                  <Typography variant="h5" fontWeight={700}>
-                    {summaryMetrics.totalSkus.toLocaleString()}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    bgcolor: 'success.alpha12',
-                    color: 'success.main',
-                    display: 'flex',
-                  }}
-                >
-                  <CheckIcon size={28} />
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    UNIDADES EN INVENTARIO
-                  </Typography>
-                  <Typography variant="h5" fontWeight={700}>
-                    {summaryMetrics.totalUnits.toLocaleString()}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: 'background.paper' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    bgcolor: 'warning.alpha12',
-                    color: 'warning.main',
-                    display: 'flex',
-                  }}
-                >
-                  <WarningIcon size={28} />
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    POCO STOCK (≤ 5) / AGOTADOS
-                  </Typography>
-                  <Typography variant="h5" fontWeight={700} color={summaryMetrics.outOfStockCount > 0 ? 'error.main' : 'warning.main'}>
-                    {summaryMetrics.lowStockCount} / {summaryMetrics.outOfStockCount}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
 
       {/* Complete Product Edit Modal Dialog */}
       {editItem && (
@@ -1187,6 +1160,11 @@ export function InventoryTable({
           </Box>
 
           <DialogContent dividers sx={{ p: 3 }}>
+            {saveError ? (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {saveError}
+              </Alert>
+            ) : null}
             {/* Tab 0: General Product Information */}
             {editTab === 0 && (
               <Stack spacing={3}>

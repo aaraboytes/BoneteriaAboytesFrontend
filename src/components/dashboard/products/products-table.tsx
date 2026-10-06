@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   Chip,
+  Collapse,
   Grid,
   IconButton,
   InputAdornment,
@@ -65,6 +66,7 @@ interface ProductsTableProps {
   products: Product[];
   onEdit: (product: Product) => void;
   onDelete: (id: number) => void;
+  onAdd?: () => void;
 }
 
 // Helpers to extract filter attributes from product or variants
@@ -168,7 +170,7 @@ function getBarcodes(p: Product): string[] {
   return Array.from(barcodes);
 }
 
-export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps): React.JSX.Element {
+export function ProductsTable({ products, onEdit, onDelete, onAdd }: ProductsTableProps): React.JSX.Element {
   // Global search autocomplete state
   const [globalSearch, setGlobalSearch] = React.useState<string>('');
 
@@ -179,6 +181,8 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
   const [sizeFilter, setSizeFilter] = React.useState<string | null>(null);
   const [colorFilter, setColorFilter] = React.useState<string | null>(null);
   const [stockStatusFilter, setStockStatusFilter] = React.useState<string | null>(null);
+
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
 
   // Pagination
   const [page, setPage] = React.useState(0);
@@ -337,6 +341,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
     colorFilter,
     stockStatusFilter,
   ].filter(Boolean).length;
+  const columnFiltersCount = [providerFilter, genreFilter, modelFilter, sizeFilter, colorFilter, stockStatusFilter].filter(Boolean).length;
 
   return (
     <Stack spacing={3}>
@@ -357,7 +362,8 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  placeholder="Buscar por Descripción, Proveedor, SKU, Código de Barras, Color, Talla..."
+                  placeholder="Buscar por nombre, SKU, código de barras, proveedor, color o talla"
+                  inputProps={{ ...params.inputProps, 'aria-label': 'Buscar productos' }}
                   variant="outlined"
                   size="small"
                   InputProps={{
@@ -370,7 +376,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                     endAdornment: (
                       <>
                         {globalSearch && (
-                          <IconButton size="small" onClick={() => setGlobalSearch('')}>
+                          <IconButton size="small" aria-label="Borrar búsqueda" onClick={() => setGlobalSearch('')}>
                             <ClearIcon size={16} />
                           </IconButton>
                         )}
@@ -387,30 +393,26 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                 />
               )}
             />
+            <Button
+              variant={columnFiltersCount > 0 ? 'contained' : 'outlined'}
+              size="small"
+              startIcon={<FilterIcon />}
+              onClick={() => setFiltersOpen((o) => !o)}
+              aria-expanded={filtersOpen}
+              sx={{ borderRadius: 2, whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              Filtros{columnFiltersCount > 0 ? ` (${columnFiltersCount})` : ''}
+            </Button>
             {activeFiltersCount > 0 && (
-              <Button
-                variant="outlined"
-                color="secondary"
-                size="small"
-                startIcon={<ClearIcon />}
-                onClick={handleClearFilters}
-                sx={{ borderRadius: 2, whitespace: 'nowrap' }}
-              >
-                Limpiar Filtros ({activeFiltersCount})
+              <Button variant="text" size="small" startIcon={<ClearIcon />} onClick={handleClearFilters} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                Limpiar
               </Button>
             )}
           </Stack>
 
-          {/* Dynamic Column Autocomplete Filters Section */}
+          <Collapse in={filtersOpen || columnFiltersCount > 0} unmountOnExit>
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: 'background.neutral' }}>
             <Stack spacing={1.5}>
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <FilterIcon size={18} color="var(--mui-palette-primary-main)" />
-                <Typography variant="subtitle2" fontWeight={700} color="primary">
-                  Filtros Inteligentes por Columna (Autocomplete)
-                </Typography>
-              </Stack>
-
               <Grid container spacing={1.5}>
                 {/* 1. Proveedor Autocomplete Filter */}
                 <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
@@ -497,15 +499,22 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                       setPage(0);
                     }}
                     renderInput={(params) => (
-                      <TextField {...params} label="Estado de Inventario" size="small" placeholder="Todos" variant="outlined" />
+                      <TextField {...params} label="Existencias" size="small" placeholder="Todos" variant="outlined" />
                     )}
                   />
                 </Grid>
               </Grid>
             </Stack>
           </Paper>
+          </Collapse>
         </Stack>
       </Card>
+
+      <Typography variant="body2" color="text.secondary" role="status">
+        {filteredProducts.length === products.length
+          ? `${products.length} ${products.length === 1 ? 'producto' : 'productos'}`
+          : `${filteredProducts.length} de ${products.length} productos`}
+      </Typography>
 
       {/* Products Table Card */}
       <Card variant="outlined">
@@ -514,10 +523,10 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
             <TableHead>
               <TableRow>
                 <TableCell>Producto</TableCell>
-                <TableCell>Detalles / Descripción</TableCell>
+                <TableCell>Detalles</TableCell>
                 <TableCell>Precio</TableCell>
-                <TableCell>Stock</TableCell>
-                <TableCell>Ubicación en Mapa</TableCell>
+                <TableCell>Existencias</TableCell>
+                <TableCell>Ubicación</TableCell>
                 <TableCell align="right">Acciones</TableCell>
               </TableRow>
             </TableHead>
@@ -581,7 +590,7 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={`${stock} units`}
+                        label={stock === 0 ? 'Sin existencia' : `${stock} en total`}
                         size="small"
                         color={stock > 5 ? 'success' : stock > 0 ? 'warning' : 'error'}
                         variant="outlined"
@@ -600,10 +609,10 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                     </TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={1} justifyContent="flex-end">
-                        <IconButton size="small" onClick={() => onEdit(product)}>
+                        <IconButton size="small" aria-label={`Editar ${displayName}`} onClick={() => onEdit(product)}>
                           <PencilIcon fontSize="var(--icon-fontSize-md)" />
                         </IconButton>
-                        <IconButton size="small" color="error" onClick={() => onDelete(product.id)}>
+                        <IconButton size="small" color="error" aria-label={`Eliminar ${displayName}`} onClick={() => onDelete(product.id)}>
                           <TrashIcon fontSize="var(--icon-fontSize-md)" />
                         </IconButton>
                       </Stack>
@@ -617,8 +626,13 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
                     <Typography variant="body2" color="text.secondary">
                       {activeFiltersCount > 0
                         ? 'No se encontraron productos con los filtros seleccionados.'
-                        : 'No products found. Add your first product!'}
+                        : 'Aún no hay productos en el catálogo.'}
                     </Typography>
+                    {activeFiltersCount === 0 && onAdd && (
+                      <Button variant="contained" size="small" onClick={onAdd} sx={{ mt: 1.5 }}>
+                        Agregar el primer producto
+                      </Button>
+                    )}
                     {activeFiltersCount > 0 && (
                       <Button variant="text" size="small" onClick={handleClearFilters} sx={{ mt: 1 }}>
                         Limpiar Filtros
@@ -643,7 +657,8 @@ export function ProductsTable({ products, onEdit, onDelete }: ProductsTableProps
             setPage(0);
           }}
           rowsPerPageOptions={[10, 25, 50, 100]}
-          labelRowsPerPage="Filas por página:"
+          labelRowsPerPage="Productos por página:"
+          labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
         />
       </Card>
     </Stack>

@@ -79,7 +79,7 @@ export function ActiveStaffPopover({ anchorEl, onClose, open }: ActiveStaffPopov
       transformOrigin={{ horizontal: 'center', vertical: 'top' }}
     >
       <Box sx={{ p: 2, borderBottom: '1px solid var(--mui-palette-divider)' }}>
-        <Typography variant="h6">Active Staff</Typography>
+        <Typography variant="h6">Personal activo</Typography>
         <Typography variant="body2" color="text.secondary">Currently working based on schedules</Typography>
       </Box>
 
@@ -89,7 +89,7 @@ export function ActiveStaffPopover({ anchorEl, onClose, open }: ActiveStaffPopov
         </Box>
       ) : staff.length === 0 ? (
         <Box sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">No staff currently working.</Typography>
+          <Typography variant="body2" color="text.secondary">Nadie está trabajando en este momento.</Typography>
         </Box>
       ) : (
         <List disablePadding>

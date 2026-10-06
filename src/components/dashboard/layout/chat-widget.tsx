@@ -33,6 +33,23 @@ import { Plus as PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
 import { Gear as SettingsIcon } from '@phosphor-icons/react/dist/ssr/Gear';
 import { Trash as TrashIcon } from '@phosphor-icons/react/dist/ssr/Trash';
 import dayjs from 'dayjs';
+import 'dayjs/locale/es';
+
+// Play the notification chime in a cross-browser way.
+// Chrome decodes 32-bit float WAV, but Edge/Firefox only reliably decode MP3
+// and standard 16-bit PCM WAV. Prefer MP3, then fall back to WAV.
+function playChime(): void {
+    const play = (src: string): Promise<void> => {
+        const audio = new Audio(src);
+        return audio.play();
+    };
+    play('/sounds/Notification.mp3').catch(() => {
+        // Fallback for any browser that fails to load/decode the MP3.
+        play('/sounds/Notification.wav').catch((err) => {
+            console.log('Audio playback blocked or failed:', err);
+        });
+    });
+}
 
 interface ChatUser {
     id: number;
@@ -50,6 +67,7 @@ interface ChatGroup {
 }
 
 type ThreadType = 'direct' | 'group';
+
 
 interface ChatThread {
     id: number;
@@ -96,6 +114,31 @@ function stringToColor(string: string) {
     return `hsl(${h}, 60%, 45%)`;
 }
 
+function formatSeparatorDate(timestamp: string): string {
+    const d = dayjs(timestamp).locale('es');
+    if (!d.isValid()) return '';
+    const now = dayjs();
+    if (d.isSame(now, 'day')) {
+        return `Hoy, ${d.format('h:mm A')}`;
+    }
+    if (d.isSame(now.subtract(1, 'day'), 'day')) {
+        return `Ayer, ${d.format('h:mm A')}`;
+    }
+    if (d.isSame(now, 'year')) {
+        return d.format('D MMM, h:mm A');
+    }
+    return d.format('D MMM YYYY, h:mm A');
+}
+
+function shouldShowSeparator(currentMsg: Message, prevMsg: Message | null): boolean {
+    if (!prevMsg) return true;
+    const current = dayjs(currentMsg.timestamp);
+    const prev = dayjs(prevMsg.timestamp);
+    if (!current.isValid() || !prev.isValid()) return false;
+    return current.diff(prev, 'minute') >= 120;
+}
+
+
 interface ChatWindowProps {
     thread: ChatThread;
     currentUser: { id: number; fullName: string; email: string };
@@ -111,6 +154,7 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
     const [inputText, setInputText] = React.useState('');
     const [loadingMessages, setLoadingMessages] = React.useState(false);
     const [isMinimized, setIsMinimized] = React.useState(false);
+
     
     // Collapsed unseen messages state
     const [unseenCount, setUnseenCount] = React.useState(0);
@@ -167,10 +211,7 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
     // Sound play helper
     const playNotificationSound = React.useCallback(() => {
         if (isSoundEnabled) {
-            const audio = new Audio('/sounds/Notification.wav');
-            audio.play().catch(err => {
-                console.log('Audio playback blocked or failed:', err);
-            });
+            playChime();
         }
     }, [isSoundEnabled]);
 
@@ -224,18 +265,24 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
     React.useEffect(() => {
         if (!lastMessage) return;
 
-        // Ignore messages received before this window was opened
-        if (lastMessage.receivedAt && lastMessage.receivedAt < mountTimeRef.current) {
+        // Ignore messages received long before this window was opened (allow small grace period)
+        if (lastMessage.receivedAt && (mountTimeRef.current - lastMessage.receivedAt > 3000)) {
             return;
         }
 
-        const isGroup = lastMessage.staffGroupId !== null && lastMessage.staffGroupId !== undefined;
-        const matchesGroup = isGroup && thread.type === 'group' && lastMessage.staffGroupId === thread.id;
+        const msgStaffGroupId = lastMessage.staffGroupId != null ? Number(lastMessage.staffGroupId) : null;
+        const isGroup = msgStaffGroupId !== null && msgStaffGroupId > 0;
+        const msgSenderId = Number(lastMessage.senderId);
+        const msgReceiverId = lastMessage.receiverId != null ? Number(lastMessage.receiverId) : null;
+        const threadId = Number(thread.id);
+
+        const matchesGroup = isGroup && thread.type === 'group' && msgStaffGroupId === threadId;
         const matchesDirect = !isGroup && thread.type === 'direct' && 
-            (lastMessage.senderId === thread.id || lastMessage.receiverId === thread.id);
+            (msgSenderId === threadId || msgReceiverId === threadId);
 
         if (matchesGroup || matchesDirect) {
-            const isMe = lastMessage.senderId === currentUser.id;
+            const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
+            const isMe = currentUserId !== null && msgSenderId === currentUserId;
 
             setMessages(prev => {
                 if (prev.some(m => m.id === lastMessage.id)) return prev;
@@ -251,16 +298,16 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
 
             // Mark direct/group messages as read if we are focused and not minimized
             if (!isMinimized) {
-                if (!isGroup && lastMessage.senderId === thread.id) {
-                    apiClient.post(`/Chat/messages/read?senderId=${thread.id}`)
-                        .then(() => onMessageRead(thread.id, 'direct'))
+                if (!isGroup && msgSenderId === threadId) {
+                    apiClient.post(`/Chat/messages/read?senderId=${threadId}`)
+                        .then(() => onMessageRead(threadId, 'direct'))
                         .catch(err => console.error('Error marking message read:', err));
-                } else if (isGroup && lastMessage.staffGroupId === thread.id) {
-                    onMessageRead(thread.id, 'group');
+                } else if (isGroup && msgStaffGroupId === threadId) {
+                    onMessageRead(threadId, 'group');
                 }
             }
         }
-    }, [lastMessage, thread.id, thread.type, isMinimized, onMessageRead, playNotificationSound, currentUser.id]);
+    }, [lastMessage, thread.id, thread.type, isMinimized, onMessageRead, playNotificationSound, currentUser?.id]);
 
     const handleSendMessage = async () => {
         if (!inputText.trim()) return;
@@ -318,7 +365,7 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
         setIsSavingEdit(true);
         try {
             const userIds = Array.from(new Set([currentUser.id, ...editSelectedUserIds]));
-            await apiClient.put(`/StaffGroups/${thread.id}`, {
+            await apiClient.put(`/Chat/groups/${thread.id}`, {
                 name: editGroupName.trim(),
                 userIds
             });
@@ -334,7 +381,7 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
     const handleDeleteGroup = async () => {
         setIsDeletingGroup(true);
         try {
-            await apiClient.delete(`/StaffGroups/${thread.id}`);
+            await apiClient.delete(`/Chat/groups/${thread.id}`);
             setIsDeleteDialogOpen(false);
             onClose();
             onGroupUpdated();
@@ -350,17 +397,18 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
             <Paper 
                 elevation={4} 
                 sx={{ 
-                    width: { xs: '100%', sm: 320 }, 
-                    height: { xs: isMinimized ? 44 : '60vh', sm: isMinimized ? 44 : 400 }, 
-                    maxHeight: '80vh',
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    borderRadius: '12px 12px 0 0', 
+                    width: { xs: isMinimized ? 280 : '100%', sm: 320 },
+                    maxWidth: '100vw',
+                    height: { xs: isMinimized ? 44 : '100%', sm: isMinimized ? 44 : 400 },
+                    ...(!isMinimized && { position: { xs: 'fixed', sm: 'relative' }, inset: { xs: 0, sm: 'auto' }, zIndex: { xs: 1300, sm: 'auto' } }),
+                    display: 'flex',
+                    flexDirection: 'column',
+                    borderRadius: { xs: isMinimized ? '12px 12px 0 0' : 0, sm: '12px 12px 0 0' },
                     overflow: 'hidden', 
                     pointerEvents: 'auto',
                     border: '1px solid',
                     borderColor: 'divider',
-                    transition: 'all 0.2s ease-in-out'
+                    transition: 'height 0.2s ease-in-out'
                 }}
             >
                 {/* Chat Header */}
@@ -413,12 +461,12 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
                         >
                             {thread.type === 'group' && (
                                 <MenuItem onClick={handleOpenEditDialog} sx={{ fontSize: '0.8rem' }}>
-                                    Group Settings
+                                    {'Configuración de Grupo'}
                                 </MenuItem>
                             )}
                             {thread.type === 'group' && (
                                 <MenuItem onClick={handleOpenDeleteDialog} sx={{ fontSize: '0.8rem', color: 'error.main' }}>
-                                    Delete Group
+                                    {'Eliminar Grupo'}
                                 </MenuItem>
                             )}
                             {thread.type === 'group' && <Divider />}
@@ -430,7 +478,7 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
                                 sx={{ fontSize: '0.8rem' }}
                             >
                                 <Checkbox size="small" checked={isSoundEnabled} sx={{ p: 0.5, mr: 0.5 }} readOnly />
-                                Play Notification Sound
+                                {'Reproducir Sonido de Notificación'}
                             </MenuItem>
                         </Menu>
 
@@ -446,65 +494,98 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
                 {/* Chat Messages History */}
                 {!isMinimized && (
                     <>
-                        <Box sx={{ flexGrow: 1, p: 1.5, overflowY: 'auto', bgcolor: '#f8f9fa', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <Box sx={{ flexGrow: 1, p: 1.5, overflowY: 'auto', bgcolor: 'background.default', display: 'flex', flexDirection: 'column', gap: 1 }}>
                             {loadingMessages ? (
                                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }} />
                             ) : messages.length === 0 ? (
                                 <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', mt: 4 }}>
-                                    No messages yet. Say hello! 👋
+                                    Todavía no hay mensajes. ¡Saluda! 👋
                                 </Typography>
                             ) : (
-                                messages.map((m) => {
-                                    const isMe = m.senderId === currentUser.id;
+                                messages.map((m, index) => {
+                                    const isMe = currentUser?.id != null && Number(m.senderId) === Number(currentUser.id);
                                     const isGroup = thread.type === 'group';
+                                    const prevMsg = index > 0 ? messages[index - 1] : null;
+                                    const showSeparator = shouldShowSeparator(m, prevMsg);
+
                                     return (
-                                        <Box 
-                                            key={m.id} 
-                                            sx={{ 
-                                                alignSelf: isMe ? 'flex-end' : 'flex-start',
-                                                maxWidth: '80%',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                alignItems: isMe ? 'flex-end' : 'flex-start'
-                                            }}
-                                        >
-                                            {!isMe && isGroup && (
-                                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', fontWeight: 600, mb: 0.25, ml: 0.5 }}>
-                                                    {m.senderName || 'Colleague'}
-                                                </Typography>
-                                            )}
-                                            <Tooltip title={dayjs(m.timestamp).format('h:mm A')} placement={isMe ? 'left' : 'right'}>
+                                        <React.Fragment key={m.id}>
+                                            {showSeparator && (
                                                 <Box 
                                                     sx={{ 
-                                                        bgcolor: isMe ? 'primary.main' : 'grey.200', 
-                                                        color: isMe ? 'primary.contrastText' : 'text.primary', 
-                                                        p: 1, 
-                                                        px: 1.5, 
-                                                        borderRadius: '16px',
-                                                        borderTopRightRadius: isMe ? '2px' : '16px',
-                                                        borderTopLeftRadius: isMe ? '16px' : '2px',
-                                                        fontSize: '0.8rem',
-                                                        lineHeight: 1.3,
-                                                        wordBreak: 'break-word'
+                                                        display: 'flex', 
+                                                        alignItems: 'center', 
+                                                        my: 1, 
+                                                        px: 0.5 
                                                     }}
                                                 >
-                                                    {m.messageText}
+                                                    <Divider sx={{ flexGrow: 1 }} />
+                                                    <Typography 
+                                                        variant="caption" 
+                                                        sx={{ 
+                                                            px: 1.25, 
+                                                            py: 0.25, 
+                                                            borderRadius: '12px', 
+                                                            bgcolor: 'action.selected',
+                                                            color: 'text.secondary', 
+                                                            fontSize: '0.65rem', 
+                                                            fontWeight: 600,
+                                                            letterSpacing: '0.3px',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        {formatSeparatorDate(m.timestamp)}
+                                                    </Typography>
+                                                    <Divider sx={{ flexGrow: 1 }} />
                                                 </Box>
-                                            </Tooltip>
-                                        </Box>
+                                            )}
+                                            <Box 
+                                                sx={{ 
+                                                    alignSelf: isMe ? 'flex-end' : 'flex-start',
+                                                    maxWidth: '80%',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: isMe ? 'flex-end' : 'flex-start'
+                                                }}
+                                            >
+                                                {!isMe && isGroup && (
+                                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', fontWeight: 600, mb: 0.25, ml: 0.5 }}>
+                                                        {m.senderName || 'Colega'}
+                                                    </Typography>
+                                                )}
+                                                <Tooltip title={dayjs(m.timestamp).format('h:mm A')} placement={isMe ? 'left' : 'right'}>
+                                                    <Box 
+                                                        sx={{ 
+                                                            bgcolor: isMe ? 'primary.main' : 'background.paper', border: isMe ? 'none' : '1px solid', borderColor: 'divider', 
+                                                            color: isMe ? 'primary.contrastText' : 'text.primary', 
+                                                            p: 1, 
+                                                            px: 1.5, 
+                                                            borderRadius: '16px',
+                                                            borderTopRightRadius: isMe ? '2px' : '16px',
+                                                            borderTopLeftRadius: isMe ? '16px' : '2px',
+                                                            fontSize: '0.8rem',
+                                                            lineHeight: 1.3,
+                                                            wordBreak: 'break-word'
+                                                        }}
+                                                    >
+                                                        {m.messageText}
+                                                    </Box>
+                                                </Tooltip>
+                                            </Box>
+                                        </React.Fragment>
                                     );
                                 })
                             )}
                             <div ref={messagesEndRef} />
                         </Box>
+{/* Input Form */}
                         <Divider />
-                        {/* Input Form */}
                         <Box sx={{ p: 1, bgcolor: 'background.paper' }}>
                             <Stack direction="row" spacing={1} alignItems="center">
                                 <TextField
                                     size="small"
                                     fullWidth
-                                    placeholder="Type a message..."
+                                    placeholder="Escribe un mensaje…"
                                     value={inputText}
                                     onChange={e => setInputText(e.target.value)}
                                     onKeyDown={e => {
@@ -530,18 +611,18 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
 
             {/* Edit Group Dialog */}
             <Dialog open={isEditDialogOpen} onClose={() => setIsEditDialogOpen(false)} maxWidth="xs" fullWidth sx={{ pointerEvents: 'auto' }}>
-                <DialogTitle sx={{ pb: 1, fontWeight: 700 }}>Group Settings</DialogTitle>
+                <DialogTitle sx={{ pb: 1, fontWeight: 700 }}>{'Configuración de Grupo'}</DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} sx={{ mt: 1 }}>
                         <TextField
-                            label="Group Name"
+                            label={'Nombre del Grupo'}
                             size="small"
                             fullWidth
                             value={editGroupName}
                             onChange={e => setEditGroupName(e.target.value)}
                         />
                         <TextField
-                            placeholder="Search colleagues..."
+                            placeholder={'Buscar colaboradores...'}
                             size="small"
                             fullWidth
                             value={editSearchQuery}
@@ -598,28 +679,28 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
                     </Stack>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setIsEditDialogOpen(false)} size="small">Cancel</Button>
+                    <Button onClick={() => setIsEditDialogOpen(false)} size="small">{'Cancelar'}</Button>
                     <Button
                         onClick={handleSaveEdit}
                         variant="contained"
                         size="small"
                         disabled={!editGroupName.trim() || editSelectedUserIds.length === 0 || isSavingEdit}
                     >
-                        {isSavingEdit ? 'Saving...' : 'Save'}
+                        {isSavingEdit ? '...' : 'Guardar'}
                     </Button>
                 </DialogActions>
             </Dialog>
 
             {/* Delete Group Dialog */}
             <Dialog open={isDeleteDialogOpen} onClose={() => setIsDeleteDialogOpen(false)} maxWidth="xs" sx={{ pointerEvents: 'auto' }}>
-                <DialogTitle sx={{ fontWeight: 700 }}>Delete Group Chat</DialogTitle>
+                <DialogTitle sx={{ fontWeight: 700 }}>{'Eliminar Chat de Grupo'}</DialogTitle>
                 <DialogContent>
                     <Typography variant="body2">
-                        Are you sure you want to delete the group chat "{thread.name}"? This action cannot be undone and all message history will be lost.
+                        ¿Está seguro de que desea eliminar el chat de grupo "{thread.name}"? Esta acción no se puede deshacer y se perderá el historial de mensajes.
                     </Typography>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setIsDeleteDialogOpen(false)} size="small">Cancel</Button>
+                    <Button onClick={() => setIsDeleteDialogOpen(false)} size="small">{'Cancelar'}</Button>
                     <Button
                         onClick={handleDeleteGroup}
                         variant="contained"
@@ -627,7 +708,7 @@ function ChatWindow({ thread, currentUser, lastMessage, onClose, onMessageRead, 
                         size="small"
                         disabled={isDeletingGroup}
                     >
-                        {isDeletingGroup ? 'Deleting...' : 'Delete'}
+                        {isDeletingGroup ? 'Eliminando…' : 'Eliminar'}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -660,11 +741,19 @@ export function ChatWidget(): React.JSX.Element | null {
     const connectionRef = React.useRef<any>(null);
     const myGroupsRef = React.useRef<ChatGroup[]>([]);
     const openThreadsRef = React.useRef<ChatThread[]>([]);
+    const threadsRef = React.useRef<ChatThread[]>([]);
+    const userRef = React.useRef(user);
+    userRef.current = user;
 
     // Keep open threads ref fresh for SignalR listener
     React.useEffect(() => {
         openThreadsRef.current = openThreads;
     }, [openThreads]);
+
+    // Keep threads ref fresh so the SignalR listener can resolve the sender's thread
+    React.useEffect(() => {
+        threadsRef.current = threads;
+    }, [threads]);
 
     // Fetch users and groups, construct threads list
     const fetchData = React.useCallback(async () => {
@@ -676,17 +765,18 @@ export function ChatWidget(): React.JSX.Element | null {
             setUsers(fetchedUsers);
 
             // Load all staff groups
-            const groupsRes = await apiClient.get('/StaffGroups');
+            const groupsRes = await apiClient.get('/Chat/groups');
             const fetchedGroups: ChatGroup[] = groupsRes.data;
 
             // Filter groups containing the current user
-            const userGroups = fetchedGroups.filter(g => g.userIds.includes(user.id));
+            const currentUid = Number(user.id);
+            const userGroups = fetchedGroups.filter(g => g.userIds.map(Number).includes(currentUid));
             setMyGroups(userGroups);
             myGroupsRef.current = userGroups;
 
             // Construct Thread items
             const directThreads: ChatThread[] = fetchedUsers.map(u => ({
-                id: u.id,
+                id: Number(u.id),
                 name: u.fullName,
                 type: 'direct',
                 avatarUrl: u.avatarUrl,
@@ -695,18 +785,18 @@ export function ChatWidget(): React.JSX.Element | null {
             }));
 
             const groupThreads: ChatThread[] = userGroups.map(g => ({
-                id: g.id,
+                id: Number(g.id),
                 name: g.name,
                 type: 'group',
                 unreadCount: 0,
-                subtitle: `${g.userIds.length} members`,
+                subtitle: `${g.userIds.length} miembros`,
                 userIds: g.userIds
             }));
 
             const freshThreads = [...groupThreads, ...directThreads];
             setThreads(freshThreads);
             setOpenThreads(prev => prev.map(openT => {
-                const freshT = freshThreads.find(t => t.id === openT.id && t.type === openT.type);
+                const freshT = freshThreads.find(t => Number(t.id) === Number(openT.id) && t.type === openT.type);
                 return freshT ? freshT : openT;
             }));
         } catch (err) {
@@ -732,7 +822,9 @@ export function ChatWidget(): React.JSX.Element | null {
         const baseUrl = apiBase.replace(/\/api\/?$/, '');
         
         const connection = new HubConnectionBuilder()
-            .withUrl(`${baseUrl}/hubs/appointments`, {
+            .withUrl(`${baseUrl}/hubs/chat`, {
+                // The token goes in the query string, so cookies/credentials are not needed (and a wildcard CORS policy rejects them).
+                withCredentials: false,
                 accessTokenFactory: () => {
                     try {
                         return localStorage.getItem('custom-auth-token') || '';
@@ -748,75 +840,82 @@ export function ChatWidget(): React.JSX.Element | null {
         connectionRef.current = connection;
 
         connection.on('ReceiveChatMessage', (msg: Message) => {
-            const currentUserId = user.id;
+            const currentUserId = userRef.current?.id != null ? Number(userRef.current.id) : null;
+            if (currentUserId === null) return;
 
-            // Determine if message is group chat or direct message
-            const isGroup = msg.staffGroupId !== null && msg.staffGroupId !== undefined;
-            
-            // Check relevance: direct message for us, or group message for a group we are in
+            const senderId = Number(msg.senderId);
+            const receiverId = msg.receiverId != null ? Number(msg.receiverId) : null;
+            const staffGroupId = msg.staffGroupId != null ? Number(msg.staffGroupId) : null;
+            const isGroup = staffGroupId !== null && staffGroupId > 0;
+
+            // Check relevance: a direct message for us, or a message for a group we are in
             let isRelevant = false;
             if (isGroup) {
-                isRelevant = myGroupsRef.current.some(g => g.id === msg.staffGroupId);
+                isRelevant = myGroupsRef.current.some(g => Number(g.id) === staffGroupId);
             } else {
-                isRelevant = msg.senderId === currentUserId || msg.receiverId === currentUserId;
+                isRelevant = senderId === currentUserId || receiverId === currentUserId;
             }
 
             if (!isRelevant) return;
 
-            // Forward to active chat windows with local arrival timestamp
-            setLastMessage({ ...msg, receivedAt: Date.now() });
+            // Forward to active chat windows with normalized IDs and local arrival timestamp
+            const normalizedMsg: Message = {
+                ...msg,
+                id: Number(msg.id),
+                senderId,
+                receiverId,
+                staffGroupId,
+                receivedAt: Date.now()
+            };
+            setLastMessage(normalizedMsg);
 
-            const isThreadOpen = openThreadsRef.current.some(t => 
-                isGroup 
-                    ? (t.type === 'group' && t.id === msg.staffGroupId)
-                    : (t.type === 'direct' && t.id === msg.senderId)
-            );
 
-            if (msg.senderId !== currentUserId) {
+            const isThreadOpen = openThreadsRef.current.some(t => {
+                if (isGroup) {
+                    return t.type === 'group' && Number(t.id) === staffGroupId;
+                }
+                const targetUserId = senderId === currentUserId ? receiverId : senderId;
+                return t.type === 'direct' && targetUserId !== null && Number(t.id) === targetUserId;
+            });
+
+            if (senderId !== currentUserId) {
                 // Increment unread count for the matching thread
                 setThreads(prev => prev.map(t => {
-                    const matchesGroup = isGroup && t.type === 'group' && t.id === msg.staffGroupId;
-                    const matchesDirect = !isGroup && t.type === 'direct' && t.id === msg.senderId;
+                    const matchesGroup = isGroup && t.type === 'group' && Number(t.id) === staffGroupId;
+                    const matchesDirect = !isGroup && t.type === 'direct' && Number(t.id) === senderId;
                     if (matchesGroup || matchesDirect) {
-                        return { ...t, unreadCount: t.unreadCount + 1 };
+                        return { ...t, unreadCount: (t.unreadCount || 0) + 1 };
                     }
                     return t;
                 }));
 
-                // Add a notification toast item if the thread is not open
+                // If the sender's chatbox isn't open, open it automatically.
                 if (!isThreadOpen) {
-                    const threadId = isGroup ? msg.staffGroupId! : msg.senderId;
-                    const threadType = isGroup ? 'group' : 'direct';
-                    let isSoundEnabled = true;
-                    try {
-                        const saved = localStorage.getItem(`chat-sound-${threadType}-${threadId}`);
-                        isSoundEnabled = saved !== 'false';
-                    } catch {
-                        isSoundEnabled = true;
-                    }
+                    const threadId = isGroup ? staffGroupId! : senderId;
+                    const threadType: ThreadType = isGroup ? 'group' : 'direct';
+                    // Note: the notification sound is played by the ChatWindow once it is
+                    // (auto-)opened below, so we don't play it here to avoid duplicate sounds.
 
-                    if (isSoundEnabled) {
-                        const audio = new Audio('/sounds/Notification.wav');
-                        audio.play().catch(err => {
-                            console.log('Audio playback blocked or failed in parent:', err);
-                        });
-                    }
+                    // Auto-open the sender's chatbox when a new message arrives and it isn't open yet.
+                    // Resolve the target thread from the fresh threads ref (fallback to a minimal thread).
+                    const resolvedThread = threadsRef.current.find(
+                        t => t.type === threadType && Number(t.id) === threadId
+                    ) || {
+                        id: threadId,
+                        name: isGroup ? (msg.senderName || 'Grupo') : (msg.senderName || 'Colega'),
+                        type: threadType,
+                        unreadCount: 0,
+                        subtitle: '',
+                    } as ChatThread;
 
-                    const senderDisplayName = isGroup 
-                        ? `[Group] ${msg.senderName || 'Colleague'}` 
-                        : (msg.senderName || 'Colleague');
-
-                    setNotifications(prev => [
-                        ...prev.filter(n => !(n.threadType === (isGroup ? 'group' : 'direct') && n.threadId === (isGroup ? msg.staffGroupId : msg.senderId))), // prevent duplicate notifications per thread
-                        {
-                            id: msg.id,
-                            senderId: msg.senderId,
-                            senderName: senderDisplayName,
-                            text: msg.messageText,
-                            threadType: isGroup ? 'group' : 'direct',
-                            threadId: isGroup ? msg.staffGroupId! : msg.senderId
+                    setOpenThreads(prev => {
+                        if (prev.some(t => Number(t.id) === Number(resolvedThread.id) && t.type === resolvedThread.type)) {
+                            return prev;
                         }
-                    ]);
+                        // Limit to max 3 simultaneous open chats to avoid screen overflow
+                        const next = [...prev, resolvedThread];
+                        return next.length > 3 ? next.slice(next.length - 3) : next;
+                    });
                 }
             }
         });
@@ -834,7 +933,7 @@ export function ChatWidget(): React.JSX.Element | null {
     }, [user, fetchData]);
 
     const handleMessageRead = React.useCallback((threadId: number, threadType: ThreadType) => {
-        setThreads(prev => prev.map(t => t.id === threadId && t.type === threadType ? { ...t, unreadCount: 0 } : t));
+        setThreads(prev => prev.map(t => Number(t.id) === Number(threadId) && t.type === threadType ? { ...t, unreadCount: 0 } : t));
     }, []);
 
     if (!user) return null;
@@ -844,8 +943,8 @@ export function ChatWidget(): React.JSX.Element | null {
         setIsCreatingGroup(true);
         try {
             // Include current user in group
-            const userIds = Array.from(new Set([user.id, ...selectedUserIds]));
-            await apiClient.post('/StaffGroups', {
+            const userIds = Array.from(new Set([Number(user.id), ...selectedUserIds]));
+            await apiClient.post('/Chat/groups', {
                 name: newGroupName.trim(),
                 userIds
             });
@@ -863,7 +962,7 @@ export function ChatWidget(): React.JSX.Element | null {
 
     const handleThreadClick = (thread: ChatThread) => {
         setOpenThreads(prev => {
-            if (prev.some(t => t.id === thread.id && t.type === thread.type)) {
+            if (prev.some(t => Number(t.id) === Number(thread.id) && t.type === thread.type)) {
                 return prev;
             }
             // Limit to max 3 simultaneous open chats to avoid screen overflow
@@ -873,15 +972,15 @@ export function ChatWidget(): React.JSX.Element | null {
             }
             return next;
         });
-        setNotifications(prev => prev.filter(n => !(n.threadType === thread.type && n.threadId === thread.id)));
+        setNotifications(prev => prev.filter(n => !(n.threadType === thread.type && Number(n.threadId) === Number(thread.id))));
     };
 
     const handleCloseThread = (threadId: number, threadType: ThreadType) => {
-        setOpenThreads(prev => prev.filter(t => !(t.id === threadId && t.type === threadType)));
+        setOpenThreads(prev => prev.filter(t => !(Number(t.id) === Number(threadId) && t.type === threadType)));
     };
 
     const handleNotificationClick = (item: NotificationItem) => {
-        const targetThread = threads.find(t => t.id === item.threadId && t.type === item.threadType);
+        const targetThread = threads.find(t => Number(t.id) === Number(item.threadId) && t.type === item.threadType);
         if (targetThread) {
             handleThreadClick(targetThread);
         }
@@ -895,23 +994,10 @@ export function ChatWidget(): React.JSX.Element | null {
     const totalUnread = threads.reduce((sum, t) => sum + t.unreadCount, 0);
 
     return (
-        <Box
-            sx={{
-                position: 'fixed',
-                bottom: 0,
-                right: { xs: 8, sm: 24 },
-                left: { xs: 8, sm: 'auto' },
-                zIndex: 1200,
-                display: 'flex',
-                flexDirection: { xs: 'column-reverse', sm: 'row' },
-                alignItems: { xs: 'stretch', sm: 'flex-end' },
-                gap: { xs: 1, sm: 2 },
-                pointerEvents: 'none'
-            }}
-        >
+        <Box sx={{ position: 'fixed', bottom: 0, right: { xs: 8, sm: 24 }, maxWidth: 'calc(100vw - 16px)', zIndex: 1200, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: 'flex-end', gap: { xs: 1, sm: 2 }, pointerEvents: 'none' }}>
             
             {/* Real-time Toast Notifications Box */}
-            <Stack spacing={1} sx={{ mb: 2, pointerEvents: 'auto', maxWidth: { xs: '100%', sm: 280 }, alignItems: { xs: 'stretch', sm: 'flex-end' } }}>
+            <Stack spacing={1} sx={{ mb: 2, pointerEvents: 'auto', maxWidth: 280, alignItems: 'flex-end' }}>
                 {notifications.map(n => (
                     <Card 
                         key={n.id} 
@@ -970,9 +1056,10 @@ export function ChatWidget(): React.JSX.Element | null {
             <Paper 
                 elevation={4} 
                 sx={{ 
-                    width: { xs: '100%', sm: 280 }, 
-                    height: { xs: isMenuExpanded ? '55vh' : 44, sm: isMenuExpanded ? 400 : 44 }, 
-                    maxHeight: '75vh',
+                    width: 280,
+                    maxWidth: '100%',
+                    height: isMenuExpanded ? 400 : 44,
+                    maxHeight: { xs: 'calc(100dvh - 80px)', sm: 'none' },
                     display: 'flex', 
                     flexDirection: 'column', 
                     borderRadius: '12px 12px 0 0', 
@@ -980,7 +1067,7 @@ export function ChatWidget(): React.JSX.Element | null {
                     pointerEvents: 'auto',
                     border: '1px solid',
                     borderColor: 'divider',
-                    transition: 'all 0.2s ease-in-out'
+                    transition: 'height 0.2s ease-in-out'
                 }}
             >
                 {/* Collapsed/Expanded Header Toggle */}
@@ -1003,11 +1090,11 @@ export function ChatWidget(): React.JSX.Element | null {
                             <ChatIcon size={20} color="#1976d2" weight="fill" />
                         </Badge>
                         <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '0.85rem' }}>
-                            Staff Chat
+                            {'Chat de Personal'}
                         </Typography>
                     </Stack>
                     <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                        {isMenuExpanded ? 'Hide' : 'Show'}
+                        {isMenuExpanded ? 'Ocultar' : 'Mostrar'}
                     </Typography>
                 </Stack>
 
@@ -1019,7 +1106,7 @@ export function ChatWidget(): React.JSX.Element | null {
                             <TextField
                                 size="small"
                                 fullWidth
-                                placeholder="Search conversation..."
+                                placeholder={'Buscar conversación...'}
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 InputProps={{
@@ -1039,16 +1126,17 @@ export function ChatWidget(): React.JSX.Element | null {
                         <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 0.5 }}>
                             {filteredThreads.length === 0 ? (
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 4, fontStyle: 'italic' }}>
-                                    No conversations found.
+                                    {'No se encontraron conversaciones.'}
                                 </Typography>
                             ) : (
                                 <>
+
                                     {/* Group Chats Section */}
                                     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1, pt: 1, pb: 0.5 }}>
                                         <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                            Group Chats
+                                            {'Chats de Grupo'}
                                         </Typography>
-                                        <Tooltip title="Create Group Chat">
+                                        <Tooltip title={'Crear Chat de Grupo'}>
                                             <IconButton size="small" onClick={() => setIsCreateDialogOpen(true)} sx={{ p: 0.25 }}>
                                                 <PlusIcon size={14} weight="bold" />
                                             </IconButton>
@@ -1102,7 +1190,7 @@ export function ChatWidget(): React.JSX.Element | null {
 
                                     {/* Direct Messages Section */}
                                     <Typography variant="caption" sx={{ px: 1, pt: 0.5, pb: 0.5, display: 'block', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                        Colleagues
+                                        {'Colaboradores'}
                                     </Typography>
 
                                     {filteredThreads.filter(t => t.type === 'direct').map(t => (
@@ -1157,19 +1245,19 @@ export function ChatWidget(): React.JSX.Element | null {
 
             {/* Create Group Chat Dialog */}
             <Dialog open={isCreateDialogOpen} onClose={() => setIsCreateDialogOpen(false)} maxWidth="xs" fullWidth sx={{ pointerEvents: 'auto' }}>
-                <DialogTitle sx={{ pb: 1, fontWeight: 700 }}>Create Group Chat</DialogTitle>
+                <DialogTitle sx={{ pb: 1, fontWeight: 700 }}>{'Crear Chat de Grupo'}</DialogTitle>
                 <DialogContent>
                     <Stack spacing={2} sx={{ mt: 1 }}>
                         <TextField
                             autoFocus
-                            label="Group Name"
+                            label={'Nombre del Grupo'}
                             size="small"
                             fullWidth
                             value={newGroupName}
                             onChange={e => setNewGroupName(e.target.value)}
                         />
                         <TextField
-                            placeholder="Search colleagues..."
+                            placeholder={'Buscar colaboradores...'}
                             size="small"
                             fullWidth
                             value={dialogSearchQuery}
@@ -1226,14 +1314,14 @@ export function ChatWidget(): React.JSX.Element | null {
                     </Stack>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setIsCreateDialogOpen(false)} size="small">Cancel</Button>
+                    <Button onClick={() => setIsCreateDialogOpen(false)} size="small">{'Cancelar'}</Button>
                     <Button
                         onClick={handleCreateGroup}
                         variant="contained"
                         size="small"
                         disabled={!newGroupName.trim() || selectedUserIds.length === 0 || isCreatingGroup}
                     >
-                        {isCreatingGroup ? 'Creating...' : 'Create'}
+                        {isCreatingGroup ? '...' : 'Guardar'}
                     </Button>
                 </DialogActions>
             </Dialog>

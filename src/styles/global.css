@@ -23,6 +23,12 @@
   --theme-background: #f4f8fa;
 }
 
+/* Dark mode (the .dark class is set on <html> by the colour-scheme toggle) */
+.dark {
+  --theme-main: #f4f8fa;
+  --theme-background: #0f172a;
+}
+
 *:focus-visible {
   outline: 2px solid var(--theme-main);
 }
@@ -35,4 +41,19 @@ body {
   height: 100%;
   background-color: var(--theme-background) !important;
   color: var(--theme-main);
+}
+/* Printouts (ticket, corte de caja, reporte del día) are always black on white, even from dark mode. */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  [id$='-printable'],
+  [id$='-printable'] * {
+    background: transparent !important;
+    border-color: #999 !important;
+    box-shadow: none !important;
+    color: #000 !important;
+  }
 }

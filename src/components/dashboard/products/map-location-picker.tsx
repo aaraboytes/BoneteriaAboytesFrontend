@@ -193,7 +193,7 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
   };
 
   return (
-    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, bgcolor: '#f8fafc' }}>
+    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, bgcolor: 'background.default' }}>
       <Stack spacing={2}>
         {/* Header & Store Selector */}
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between">
@@ -260,9 +260,9 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
               justifyContent: 'center',
               py: 6,
               px: 3,
-              bgcolor: '#ffffff',
+              bgcolor: 'background.paper',
               borderRadius: 3,
-              border: '2px dashed #cbd5e1',
+              border: '2px dashed var(--mui-palette-divider)',
               textAlign: 'center',
             }}
           >
@@ -288,9 +288,9 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
               position: 'relative',
               width: '100%',
               minHeight: 520,
-              bgcolor: '#ffffff',
+              bgcolor: 'background.paper',
               borderRadius: 3,
-              border: '2px dashed #cbd5e1',
+              border: '2px dashed var(--mui-palette-divider)',
               overflow: 'hidden',
               p: 2,
               display: 'flex',
@@ -311,7 +311,7 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
                 borderRadius: 2,
                 px: 1.5,
                 py: 0.6,
-                bgcolor: 'rgba(255,255,255,0.92)',
+                bgcolor: 'rgba(var(--mui-palette-background-paperChannel) / 0.92)',
                 backdropFilter: 'blur(6px)',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
                 display: { xs: 'none', sm: 'flex' },
@@ -335,7 +335,7 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
                 zIndex: 20,
                 borderRadius: 2,
                 p: 0.5,
-                bgcolor: 'rgba(255,255,255,0.92)',
+                bgcolor: 'rgba(var(--mui-palette-background-paperChannel) / 0.92)',
                 backdropFilter: 'blur(6px)',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
               }}
@@ -399,8 +399,8 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
                       height: obj.height,
                       borderRadius: 2.5,
                       borderWidth: isSelected ? 3 : 2,
-                      borderColor: isSelected ? '#2563eb' : '#334155',
-                      bgcolor: isSelected ? '#eff6ff' : '#f8fafc',
+                      borderColor: isSelected ? '#2563eb' : 'text.secondary',
+                      bgcolor: isSelected ? 'action.selected' : 'background.default',
                       boxShadow: isSelected ? '0 4px 14px rgba(37,99,235,0.25)' : '0 2px 4px rgba(0,0,0,0.04)',
                       display: 'flex',
                       alignItems: 'center',
@@ -411,7 +411,7 @@ export function MapLocationPicker({ selectedLocations, onChange }: MapLocationPi
                       '&:hover': {
                         transform: 'scale(1.04)',
                         borderColor: '#2563eb',
-                        bgcolor: isSelected ? '#dbeafe' : '#f1f5f9',
+                        bgcolor: isSelected ? 'action.selected' : 'background.default',
                       },
                     }}
                   >

@@ -5,6 +5,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
 import { paths } from '@/paths';
+import { Logo } from '@/components/core/logo';
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -26,17 +27,12 @@ export function Layout({ children }: LayoutProps): React.JSX.Element {
           display: 'flex',
           flex: '1 1 auto',
           flexDirection: 'column',
-          bgcolor: '#ffffff',
+          bgcolor: 'background.paper',
         }}
       >
         <Box sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-          <Box component={RouterLink} href={paths.home} sx={{ display: 'inline-block', fontSize: 0 }}>
-            <Box
-              component="img"
-              src="/assets/aboytes.svg"
-              alt="Boneterias Aboytes Logo"
-              sx={{ height: 48, width: 'auto' }}
-            />
+          <Box component={RouterLink} href={paths.home} aria-label="Ir al inicio" sx={{ display: 'inline-block', fontSize: 0 }}>
+            <Logo height={48} width={143} />
           </Box>
         </Box>
         <Box sx={{ alignItems: 'center', display: 'flex', flex: '1 1 auto', justifyContent: 'center', p: 3 }}>

@@ -2,6 +2,9 @@
 
 import * as React from 'react';
 import Avatar from '@mui/material/Avatar';
+import ButtonBase from '@mui/material/ButtonBase';
+import Typography from '@mui/material/Typography';
+import { usePathname } from 'next/navigation';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -21,14 +24,18 @@ import { Logo } from '@/components/core/logo';
 import { MobileNav } from './mobile-nav';
 import { UserPopover } from './user-popover';
 import { ActiveStaffPopover } from './active-staff-popover';
+import { ColorModeToggle } from './color-mode-toggle';
 import { NotificationsPopover, type NotificationRecord } from './notifications-popover';
 import apiClient from '@/lib/api-client';
+import { navItems } from './config';
 
 export function MainNav(): React.JSX.Element {
   const [openNav, setOpenNav] = React.useState<boolean>(false);
   const { user } = useUser();
+  const pathname = usePathname();
+  const pageTitle = navItems.find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`))?.title;
   const { isCollapsed, toggleCollapsed } = useSidebar();
-  const userPopover = usePopover<HTMLDivElement>();
+  const userPopover = usePopover<HTMLButtonElement>();
   const activeStaffPopover = usePopover<HTMLButtonElement>();
   const notificationsPopover = usePopover<HTMLButtonElement>();
   
@@ -60,8 +67,9 @@ export function MainNav(): React.JSX.Element {
           spacing={2}
           sx={{ alignItems: 'center', justifyContent: 'space-between', minHeight: '64px', px: 2 }}
         >
-          <Stack sx={{ alignItems: 'center' }} direction="row" spacing={2}>
+          <Stack sx={{ alignItems: 'center' }} direction="row" spacing={{ xs: 0.5, sm: 2 }}>
             <IconButton
+              aria-label="Abrir menú"
               onClick={(): void => {
                 setOpenNav(true);
               }}
@@ -69,8 +77,9 @@ export function MainNav(): React.JSX.Element {
             >
               <ListIcon />
             </IconButton>
-            <Tooltip title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <Tooltip title={isCollapsed ? 'Mostrar menú' : 'Ocultar menú'}>
               <IconButton
+                aria-label={isCollapsed ? 'Mostrar menú' : 'Ocultar menú'}
                 onClick={toggleCollapsed}
                 sx={{ display: { xs: 'none', lg: 'inline-flex' } }}
               >
@@ -87,30 +96,45 @@ export function MainNav(): React.JSX.Element {
                 ml: 1,
               }}
             >
-              <Logo color="dark" height={42} width={150} />
+              <Logo color="dark" height={42} width={150} sx={{ width: { xs: 104, sm: 150 } }} />
             </Box>
+            {pageTitle ? (
+              <Typography component="h1" variant="subtitle1" noWrap sx={{ fontWeight: 700, display: { xs: 'none', sm: 'block' } }}>
+                {pageTitle}
+              </Typography>
+            ) : null}
           </Stack>
-          <Stack sx={{ alignItems: 'center' }} direction="row" spacing={2}>
-            <Tooltip title="Active Staff">
-              <IconButton onClick={activeStaffPopover.handleOpen} ref={activeStaffPopover.anchorRef}>
+          <Stack sx={{ alignItems: 'center' }} direction="row" spacing={{ xs: 0.5, sm: 2 }}>
+            <ColorModeToggle />
+            <Tooltip title="Personal activo">
+              <IconButton aria-label="Personal activo" onClick={activeStaffPopover.handleOpen} ref={activeStaffPopover.anchorRef}>
                 <UsersIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Notifications">
-              <IconButton onClick={notificationsPopover.handleOpen} ref={notificationsPopover.anchorRef}>
+            <Tooltip title="Notificaciones">
+              <IconButton aria-label={`Notificaciones${notifications.length > 0 ? `, ${notifications.length} sin leer` : ''}`} onClick={notificationsPopover.handleOpen} ref={notificationsPopover.anchorRef}>
                 <Badge badgeContent={notifications.length} color="success" variant="standard">
                   <BellIcon />
                 </Badge>
               </IconButton>
             </Tooltip>
-            <Avatar
+            <ButtonBase
               onClick={userPopover.handleOpen}
               ref={userPopover.anchorRef}
-              src={user?.avatarUrl || '/assets/avatar.png'}
-              sx={{ cursor: 'pointer' }}
+              aria-label="Menú de usuario"
+              aria-haspopup="menu"
+              sx={{ borderRadius: 1, gap: 1.25, p: 0.5, pr: { sm: 1.5 } }}
             >
-              {user?.fullName?.charAt(0)}
-            </Avatar>
+              <Avatar src={user?.avatarUrl || '/assets/avatar.png'}>{user?.fullName?.charAt(0)}</Avatar>
+              <Box sx={{ display: { xs: 'none', sm: 'block' }, textAlign: 'left' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+                  {user?.fullName}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {user?.role}
+                </Typography>
+              </Box>
+            </ButtonBase>
           </Stack>
         </Stack>
       </Box>

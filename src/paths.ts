@@ -19,6 +19,7 @@ export const paths = {
     staff: '/dashboard/staff',
     settings: '/dashboard/settings',
     account: '/dashboard/account',
+    activity: '/dashboard/activity',
     billing: {
       cashClosing: '/dashboard/billing/cash-closing',
     },

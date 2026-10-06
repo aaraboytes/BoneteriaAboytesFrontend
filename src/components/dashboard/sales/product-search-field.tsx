@@ -53,8 +53,14 @@ export function ProductSearchField({ storeId, onSelect }: ProductSearchFieldProp
   const [inputValue, setInputValue] = React.useState('');
   const [options, setOptions] = React.useState<VariantOption[]>([]);
   const [loading, setLoading] = React.useState(false);
-  const [barcode, setBarcode] = React.useState('');
-  const [barcodeError, setBarcodeError] = React.useState<string | null>(null);
+  const [message, setMessage] = React.useState<string | null>(null);
+  const highlighted = React.useRef<VariantOption | null>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // The cashier should be able to scan the next item without touching the mouse.
+  React.useEffect(() => {
+    if (storeId) inputRef.current?.focus();
+  }, [storeId]);
 
   React.useEffect(() => {
     const q = inputValue.trim();
@@ -80,63 +86,94 @@ export function ProductSearchField({ storeId, onSelect }: ProductSearchFieldProp
     };
   }, [inputValue, storeId]);
 
-  const handleBarcodeScan = async (): Promise<void> => {
-    const code = barcode.trim();
+  const add = (option: VariantOption): void => {
+    onSelect(option);
+    setInputValue('');
+    setOptions([]);
+    setMessage(null);
+    inputRef.current?.focus();
+  };
+
+  // Enter on text that isn't a highlighted suggestion is treated as a barcode (scanners type then press Enter).
+  const handleEnter = async (): Promise<void> => {
+    const code = inputValue.trim();
     if (!code || !storeId) return;
-    setBarcodeError(null);
     try {
       const res = await apiClient.get<SearchResult[]>('/Inventory/search', { params: { storeId, barcode: code } });
       if (res.data.length === 0) {
-        setBarcodeError('Código de barras no encontrado');
+        setMessage(`No se encontró ningún producto con el código "${code}".`);
         return;
       }
-      onSelect(toOption(res.data[0]));
-      setBarcode('');
+      add(toOption(res.data[0]));
     } catch (err) {
       console.error('Barcode lookup failed', err);
-      setBarcodeError('No se pudo buscar el código');
+      setMessage('No se pudo buscar el código. Revisa la conexión e inténtalo de nuevo.');
     }
   };
 
   return (
-    <Stack spacing={1}>
-      <Autocomplete
-        options={options}
-        loading={loading}
-        // The server already filtered; show its results as they are.
-        filterOptions={(x) => x}
-        value={null}
-        inputValue={inputValue}
-        onInputChange={(_, value, reason) => {
-          if (reason !== 'reset') setInputValue(value);
-        }}
-        getOptionLabel={(option) => variantLabel(option)}
-        isOptionEqualToValue={(option, value) => option.productVariantId === value.productVariantId}
-        noOptionsText={inputValue.trim().length < 2 ? 'Escribe al menos 2 letras' : 'Sin resultados'}
-        onChange={(_, value) => {
-          if (value) {
-            onSelect(value);
-            setInputValue('');
-          }
-        }}
-        renderOption={(props, option) => (
-          <Box component="li" {...props} key={option.productVariantId}>
-            <Stack>
-              <Typography variant="body2" fontWeight={600}>
-                {variantLabel(option)}
-              </Typography>
-              <Typography variant="caption" color={option.stockQuantity > 0 ? 'text.secondary' : 'error'}>
-                Stock: {option.stockQuantity} · ${option.unitPrice.toFixed(2)}
+    <Autocomplete
+      options={options}
+      loading={loading}
+      // The server already filtered; show its results as they are.
+      filterOptions={(x) => x}
+      value={null}
+      inputValue={inputValue}
+      onInputChange={(_, value, reason) => {
+        if (reason !== 'reset') {
+          setInputValue(value);
+          setMessage(null);
+        }
+      }}
+      onHighlightChange={(_, option) => {
+        highlighted.current = option;
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' && !highlighted.current) {
+          event.preventDefault();
+          (event as unknown as { defaultMuiPrevented: boolean }).defaultMuiPrevented = true;
+          void handleEnter();
+        }
+      }}
+      getOptionLabel={(option) => variantLabel(option)}
+      isOptionEqualToValue={(option, value) => option.productVariantId === value.productVariantId}
+      noOptionsText={inputValue.trim().length < 2 ? 'Escribe al menos 2 letras' : 'Sin resultados'}
+      onChange={(_, value) => {
+        if (value) add(value);
+      }}
+      renderOption={(props, option) => {
+        const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & { key: string };
+        const out = option.stockQuantity <= 0;
+        return (
+          <Box component="li" key={key} {...rest}>
+            <Stack direction="row" justifyContent="space-between" sx={{ width: '100%' }} spacing={2}>
+              <Stack>
+                <Typography variant="body2" fontWeight={600}>
+                  {variantLabel(option)}
+                </Typography>
+                <Typography variant="caption" color={out ? 'error' : 'text.secondary'}>
+                  {out ? 'Sin existencia' : `Existencia: ${option.stockQuantity}`}
+                </Typography>
+              </Stack>
+              <Typography variant="body2" fontWeight={700}>
+                ${option.unitPrice.toFixed(2)}
               </Typography>
             </Stack>
           </Box>
-        )}
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label="Buscar producto por nombre, SKU o código de barras"
-            disabled={!storeId}
-            InputProps={{
+        );
+      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          inputRef={inputRef}
+          autoFocus
+          label="Escanea o busca un producto"
+          placeholder="Código de barras, nombre o SKU"
+          error={Boolean(message)}
+          helperText={message ?? 'Escanea el código y se agrega solo, o escribe para buscar.'}
+          disabled={!storeId}
+          slotProps={{
+            input: {
               ...params.InputProps,
               endAdornment: (
                 <>
@@ -144,25 +181,10 @@ export function ProductSearchField({ storeId, onSelect }: ProductSearchFieldProp
                   {params.InputProps.endAdornment}
                 </>
               ),
-            }}
-          />
-        )}
-      />
-      <TextField
-        label="Escanear código de barras"
-        value={barcode}
-        onChange={(e) => setBarcode(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            handleBarcodeScan();
-          }
-        }}
-        error={Boolean(barcodeError)}
-        helperText={barcodeError ?? 'Escanee o escriba el código y presione Enter'}
-        size="small"
-        disabled={!storeId}
-      />
-    </Stack>
+            },
+          }}
+        />
+      )}
+    />
   );
 }

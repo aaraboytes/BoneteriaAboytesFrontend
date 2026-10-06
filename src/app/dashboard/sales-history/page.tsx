@@ -11,10 +11,13 @@ export const metadata = { title: `Historial de Ventas | Dashboard | ${config.sit
 
 export default function Page(): React.JSX.Element {
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Stack spacing={3}>
         <Stack direction="row" spacing={3} justifyContent="space-between" alignItems="center">
-          <Typography variant="h4">Historial de Ventas</Typography>
+          <Stack spacing={0.5}>
+            <Typography variant="h4" component="h2">Historial de Ventas</Typography>
+            <Typography variant="body2" color="text.secondary">Las ventas más recientes primero. Desde aquí puedes cancelar una venta del día o registrar una devolución.</Typography>
+          </Stack>
         </Stack>
         <SalesHistoryTable />
       </Stack>

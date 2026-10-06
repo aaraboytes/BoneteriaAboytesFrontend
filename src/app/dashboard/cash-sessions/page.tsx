@@ -12,9 +12,12 @@ export const metadata = { title: `Cortes de Caja | Dashboard | ${config.site.nam
 
 export default function Page(): React.JSX.Element {
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Stack spacing={3}>
-        <Typography variant="h4">Cortes de Caja</Typography>
+        <Stack spacing={0.5}>
+          <Typography variant="h4" component="h2">Cortes de Caja</Typography>
+          <Typography variant="body2" color="text.secondary">Historial de cierres de caja: lo esperado contra lo contado, y quién abrió y cerró.</Typography>
+        </Stack>
         <PermissionGuard permission="reports.view">
           <CashSessionsTable />
         </PermissionGuard>

@@ -1,12 +1,27 @@
 'use client';
 
 import * as React from 'react';
-import { Box, Button, Container, Stack, Typography, CircularProgress, Alert } from '@mui/material';
+import {
+    Alert,
+    Box,
+    Button,
+    CircularProgress,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
+    Snackbar,
+    Stack,
+    Typography,
+} from '@mui/material';
 import { Plus as PlusIcon } from '@phosphor-icons/react/dist/ssr/Plus';
 import apiClient from '@/lib/api-client';
 
 import { ProductsTable, Product } from '@/components/dashboard/products/products-table';
 import { ProductDialog } from '@/components/dashboard/products/product-dialog';
+
+const errorMessage = (err: any, fallback: string): string => err?.response?.data?.message || err?.response?.data?.title || fallback;
 
 export default function ProductsPage(): React.JSX.Element {
     const [products, setProducts] = React.useState<Product[]>([]);
@@ -14,6 +29,10 @@ export default function ProductsPage(): React.JSX.Element {
     const [error, setError] = React.useState<string | null>(null);
     const [dialogOpen, setDialogOpen] = React.useState(false);
     const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
+    const [toDelete, setToDelete] = React.useState<Product | null>(null);
+    const [deleting, setDeleting] = React.useState(false);
+    const [deleteError, setDeleteError] = React.useState<string | null>(null);
+    const [toast, setToast] = React.useState<string | null>(null);
 
     const fetchProducts = async () => {
         setLoading(true);
@@ -25,7 +44,7 @@ export default function ProductsPage(): React.JSX.Element {
             }
         } catch (err) {
             console.error('Failed to fetch products', err);
-            setError('Error al cargar la lista de productos del servidor.');
+            setError('No se pudo cargar el catálogo de productos.');
         } finally {
             setLoading(false);
         }
@@ -45,88 +64,113 @@ export default function ProductsPage(): React.JSX.Element {
         setDialogOpen(true);
     };
 
-    const handleDelete = async (id: number) => {
-        if (!window.confirm('Are you sure you want to delete this product?')) return;
+    const askDelete = (id: number) => {
+        setDeleteError(null);
+        setToDelete(products.find((p) => p.id === id) ?? null);
+    };
+
+    const confirmDelete = async () => {
+        if (!toDelete) return;
+        setDeleting(true);
+        setDeleteError(null);
         try {
-            await apiClient.delete(`/Products/${id}`);
+            await apiClient.delete(`/Products/${toDelete.id}`);
+            setToast(`Producto "${toDelete.name || toDelete.description}" eliminado.`);
+            setToDelete(null);
             fetchProducts();
         } catch (err) {
             console.error('Failed to delete product', err);
-            alert('Failed to delete product');
+            setDeleteError(errorMessage(err, 'No se pudo eliminar el producto. Puede tener ventas o movimientos registrados.'));
+        } finally {
+            setDeleting(false);
         }
     };
 
+    // Throws on failure so the dialog stays open and shows what went wrong.
     const handleSave = async (productData: Partial<Product>) => {
+        const payload = {
+            ...productData,
+            description: productData.name || productData.description || 'Producto',
+        };
         try {
-            const payload = {
-                ...productData,
-                description: productData.name || productData.description || 'Producto',
-            };
             if (selectedProduct) {
                 await apiClient.put(`/Products/${selectedProduct.id}`, payload);
             } else {
                 await apiClient.post('/Products', payload);
             }
-            setDialogOpen(false);
-            fetchProducts();
         } catch (err) {
             console.error('Failed to save product', err);
-            alert('Failed to save product');
+            throw new Error(errorMessage(err, 'No se pudo guardar el producto. Revisa los datos e inténtalo de nuevo.'));
         }
+        setDialogOpen(false);
+        setToast(selectedProduct ? 'Cambios guardados.' : 'Producto agregado.');
+        fetchProducts();
     };
 
     return (
-        <Box
-            component="main"
-            sx={{
-                flexGrow: 1,
-                py: 8,
-            }}
-        >
-            <Container maxWidth="xl">
-                <Stack spacing={4}>
-                    <Stack direction="row" spacing={3} justifyContent="space-between" alignItems="center">
-                        <Stack spacing={1}>
-                            <Typography variant="h4">Products</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                Manage your store's product catalog and inventory.
-                            </Typography>
-                        </Stack>
-                        <Button
-                            startIcon={<PlusIcon fontSize="var(--icon-fontSize-md)" />}
-                            variant="contained"
-                            onClick={handleAdd}
-                        >
-                            Add Product
-                        </Button>
-                    </Stack>
-
-                    {error && (
-                        <Alert severity="error" onClose={() => setError(null)}>
-                            {error}
-                        </Alert>
-                    )}
-
-                    {loading ? (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                            <CircularProgress />
-                        </Box>
-                    ) : (
-                        <ProductsTable 
-                            products={products} 
-                            onEdit={handleEdit} 
-                            onDelete={handleDelete} 
-                        />
-                    )}
+        <Stack spacing={3}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ sm: 'center' }}>
+                <Stack spacing={0.5}>
+                    <Typography variant="h4" component="h2">Productos</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Catálogo de la tienda: precios, existencias y ubicación en el mapa.
+                    </Typography>
                 </Stack>
-            </Container>
+                <Button startIcon={<PlusIcon fontSize="var(--icon-fontSize-md)" />} variant="contained" onClick={handleAdd}>
+                    Agregar producto
+                </Button>
+            </Stack>
 
-            <ProductDialog
-                open={dialogOpen}
-                product={selectedProduct}
-                onClose={() => setDialogOpen(false)}
-                onSave={handleSave}
-            />
-        </Box>
+            {error && (
+                <Alert
+                    severity="error"
+                    action={
+                        <Button color="inherit" size="small" onClick={fetchProducts}>
+                            Reintentar
+                        </Button>
+                    }
+                >
+                    {error}
+                </Alert>
+            )}
+
+            {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }} role="status" aria-label="Cargando productos">
+                    <CircularProgress />
+                </Box>
+            ) : (
+                <ProductsTable products={products} onEdit={handleEdit} onDelete={askDelete} onAdd={handleAdd} />
+            )}
+
+            <ProductDialog open={dialogOpen} product={selectedProduct} onClose={() => setDialogOpen(false)} onSave={handleSave} />
+
+            <Dialog open={toDelete !== null} onClose={deleting ? undefined : () => setToDelete(null)} maxWidth="xs" fullWidth>
+                <DialogTitle>¿Eliminar este producto?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Se eliminará <strong>{toDelete?.name || toDelete?.description}</strong> del catálogo. Esta acción no se puede deshacer.
+                    </DialogContentText>
+                    {deleteError ? (
+                        <Alert severity="error" sx={{ mt: 2 }}>
+                            {deleteError}
+                        </Alert>
+                    ) : null}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setToDelete(null)} disabled={deleting} color="inherit">
+                        Conservar
+                    </Button>
+                    <Button onClick={confirmDelete} disabled={deleting} color="error" variant="contained">
+                        {deleting ? 'Eliminando…' : 'Eliminar producto'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Snackbar open={toast !== null} autoHideDuration={4000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+                <Alert onClose={() => setToast(null)} severity="success" variant="filled" sx={{ width: '100%' }}>
+                    {toast}
+                </Alert>
+            </Snackbar>
+        </Stack>
     );
 }

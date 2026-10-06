@@ -925,7 +925,7 @@ export default function StoreMapEditorPage(): React.JSX.Element {
               borderRadius: 2,
               border: '2px dashed',
               borderColor: isDropHover ? '#2563eb' : isSelected ? 'primary.main' : 'transparent',
-              bgcolor: isDropHover ? '#dbeafe' : isSelected ? '#eff6ff' : isBeingDragged ? '#f1f5f9' : 'background.paper',
+              bgcolor: isDropHover ? 'action.selected' : isSelected ? 'action.selected' : isBeingDragged ? 'background.default' : 'background.paper',
               opacity: isBeingDragged ? 0.5 : 1,
               boxShadow: isSelected ? '0 2px 8px rgba(37,99,235,0.12)' : 'none',
               display: 'flex',
@@ -935,7 +935,7 @@ export default function StoreMapEditorPage(): React.JSX.Element {
               userSelect: 'none',
               transition: 'all 0.15s ease-in-out',
               '&:hover': {
-                bgcolor: isSelected ? '#eff6ff' : '#f8fafc',
+                bgcolor: isSelected ? 'action.selected' : 'background.default',
               },
             }}
           >
@@ -974,7 +974,7 @@ export default function StoreMapEditorPage(): React.JSX.Element {
                   }}
                   onBlur={() => handleSaveRename(item.id)}
                   onClick={(e) => e.stopPropagation()}
-                  sx={{ height: 26, fontSize: 12, px: 1, py: 0, maxWidth: 110, bgcolor: '#ffffff' }}
+                  sx={{ height: 26, fontSize: 12, px: 1, py: 0, maxWidth: 110, bgcolor: 'background.paper' }}
                 />
               ) : (
                 <Tooltip title="Doble clic para renombrar">
@@ -1143,7 +1143,7 @@ export default function StoreMapEditorPage(): React.JSX.Element {
   }
 
   return (
-    <Box component="main" sx={{ flexGrow: 1, minHeight: '100vh', bgcolor: '#f1f5f9', py: 3, px: { xs: 2, md: 3 } }}>
+    <Box component="main" sx={{ flexGrow: 1, minHeight: '100vh', bgcolor: 'background.default', py: 3, px: { xs: 2, md: 3 } }}>
       <Container maxWidth="xl">
         <Stack spacing={3}>
           {/* Header Bar */}
@@ -1291,7 +1291,7 @@ export default function StoreMapEditorPage(): React.JSX.Element {
                       disabled={!hasSelection}
                       value={selectedObjText}
                       onChange={(e) => handleTextContentChange(e.target.value)}
-                      sx={{ bgcolor: '#ffffff', borderRadius: 2, fontSize: 13 }}
+                      sx={{ bgcolor: 'background.paper', borderRadius: 2, fontSize: 13 }}
                     />
                   </Stack>
 
@@ -1313,7 +1313,7 @@ export default function StoreMapEditorPage(): React.JSX.Element {
                             borderRadius: '50%',
                             bgcolor: color,
                             cursor: 'pointer',
-                            border: selectedColor === color ? '3px solid #1e293b' : '1px solid rgba(0,0,0,0.1)',
+                            border: selectedColor === color ? '3px solid var(--mui-palette-text-primary)' : '1px solid var(--mui-palette-divider)',
                             transition: 'transform 0.1s',
                             '&:hover': { transform: 'scale(1.15)' },
                           }}
@@ -1340,7 +1340,7 @@ export default function StoreMapEditorPage(): React.JSX.Element {
                             borderRadius: '50%',
                             bgcolor: color,
                             cursor: 'pointer',
-                            border: selectedTextColor === color ? '3px solid #2563eb' : '1px solid rgba(0,0,0,0.2)',
+                            border: selectedTextColor === color ? '3px solid #2563eb' : '1px solid var(--mui-palette-divider)',
                             boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                             transition: 'transform 0.1s',
                             '&:hover': { transform: 'scale(1.15)' },
@@ -1420,7 +1420,7 @@ export default function StoreMapEditorPage(): React.JSX.Element {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  bgcolor: '#ffffff',
+                  bgcolor: 'background.paper',
                   minHeight: 620,
                   position: 'relative',
                   width: '100%',
@@ -1437,7 +1437,7 @@ export default function StoreMapEditorPage(): React.JSX.Element {
                     px: 1.5,
                     py: 0.5,
                     borderRadius: 3,
-                    bgcolor: 'rgba(255, 255, 255, 0.95)',
+                    bgcolor: 'rgba(var(--mui-palette-background-paperChannel) / 0.95)',
                     backdropFilter: 'blur(4px)',
                     border: '1px solid var(--mui-palette-divider)',
                     display: 'flex',
@@ -1488,11 +1488,11 @@ export default function StoreMapEditorPage(): React.JSX.Element {
                     display: 'flex',
                     justifyContent: 'center',
                     alignItems: 'center',
-                    border: '2px dashed #cbd5e1',
+                    border: '2px dashed var(--mui-palette-divider)',
                     borderRadius: 2,
                     boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
                     overflow: 'hidden',
-                    bgcolor: '#f8fafc',
+                    bgcolor: 'background.default',
                     '& .canvas-container': {
                       maxWidth: '100% !important',
                     },
@@ -1540,8 +1540,8 @@ export default function StoreMapEditorPage(): React.JSX.Element {
                       p: 1.2,
                       borderRadius: 2,
                       border: '2px dashed',
-                      borderColor: isRootDropActive ? 'primary.main' : '#cbd5e1',
-                      bgcolor: isRootDropActive ? '#dbeafe' : '#f8fafc',
+                      borderColor: isRootDropActive ? 'primary.main' : 'divider',
+                      bgcolor: isRootDropActive ? 'action.selected' : 'background.default',
                       textAlign: 'center',
                       transition: 'all 0.15s ease-in-out',
                       cursor: 'pointer',

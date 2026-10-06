@@ -8,9 +8,6 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
-    FormControl,
-    InputLabel,
-    OutlinedInput,
     Stack,
     TextField,
     Typography,
@@ -18,8 +15,9 @@ import {
     IconButton,
     FormControlLabel,
     Checkbox,
+    Alert,
     Autocomplete,
-    Chip,
+    InputAdornment,
 } from '@mui/material';
 import { Camera as CameraIcon } from '@phosphor-icons/react/dist/ssr/Camera';
 import { X as XIcon } from '@phosphor-icons/react/dist/ssr/X';
@@ -30,7 +28,8 @@ import { MapLocationPicker } from './map-location-picker';
 interface ProductDialogProps {
     open: boolean;
     onClose: () => void;
-    onSave: (product: Partial<Product>) => void;
+    /** Should reject with an Error (shown inline) if saving fails; the dialog stays open. */
+    onSave: (product: Partial<Product>) => Promise<void>;
     product?: Product | null;
 }
 
@@ -47,6 +46,9 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
 
     const [availableLocations, setAvailableLocations] = React.useState<string[]>([]);
     const [supplierOptions, setSupplierOptions] = React.useState<string[]>([]);
+    const [saving, setSaving] = React.useState(false);
+    const [saveError, setSaveError] = React.useState<string | null>(null);
+    const [touched, setTouched] = React.useState(false);
 
     React.useEffect(() => {
         if (!open) return;
@@ -120,6 +122,8 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
                 mapLocation: [],
             });
         }
+        setSaveError(null);
+        setTouched(false);
     }, [product, open]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,14 +137,33 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
         }
     };
 
-    const handleSave = () => {
-        if (!formData.name || formData.price === undefined) return;
-        onSave(formData);
+    const nameMissing = !formData.name?.trim();
+    const priceInvalid = !(Number(formData.price) > 0);
+
+    const handleSave = async () => {
+        setTouched(true);
+        if (nameMissing || priceInvalid) return;
+        setSaving(true);
+        setSaveError(null);
+        try {
+            await onSave(formData);
+        } catch (err: any) {
+            setSaveError(err?.message || 'No se pudo guardar el producto.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
-        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-            <DialogTitle>{product ? 'Edit Product' : 'Add New Product'}</DialogTitle>
+        <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
+            <DialogTitle>{product ? 'Editar producto' : 'Nuevo producto'}</DialogTitle>
+            <form
+                noValidate
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    void handleSave();
+                }}
+            >
             <DialogContent dividers>
                 <Stack spacing={3}>
                     <Box sx={{ display: 'flex', justifyContent: 'center' }}>
@@ -162,6 +185,7 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
                             <label htmlFor="product-image-upload">
                                 <IconButton
                                     component="span"
+                                    aria-label="Elegir imagen"
                                     sx={{
                                         position: 'absolute',
                                         right: -8,
@@ -177,6 +201,7 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
                             </label>
                             {formData.imageBase64 && (
                                 <IconButton
+                                    aria-label="Quitar imagen"
                                     onClick={() => setFormData((prev) => ({ ...prev, imageBase64: '' }))}
                                     sx={{
                                         position: 'absolute',
@@ -194,17 +219,19 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
                         </Box>
                     </Box>
 
-                    <FormControl fullWidth required>
-                        <InputLabel>Product Name</InputLabel>
-                        <OutlinedInput
-                            label="Product Name"
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        />
-                    </FormControl>
+                    <TextField
+                        label="Nombre del producto"
+                        required
+                        fullWidth
+                        autoFocus
+                        value={formData.name ?? ''}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        error={touched && nameMissing}
+                        helperText={touched && nameMissing ? 'Escribe el nombre del producto.' : ' '}
+                    />
 
                     <TextField
-                        label="Description"
+                        label="Descripción (opcional)"
                         multiline
                         rows={3}
                         fullWidth
@@ -239,26 +266,27 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
                         />
                     </Stack>
 
-                    <Stack direction="row" spacing={2}>
-                        <FormControl fullWidth required>
-                            <InputLabel>Price ($)</InputLabel>
-                            <OutlinedInput
-                                label="Price ($)"
-                                type="number"
-                                value={formData.price}
-                                onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                            />
-                        </FormControl>
-                        <FormControl fullWidth>
-                            <InputLabel>Initial Quantity (Optional)</InputLabel>
-                            <OutlinedInput
-                                label="Initial Quantity (Optional)"
-                                type="number"
-                                value={formData.quantity ?? ''}
-                                onChange={(e) => setFormData({ ...formData, quantity: e.target.value ? parseInt(e.target.value) : undefined })}
-                                placeholder="Leaves blank for N/A"
-                            />
-                        </FormControl>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                        <TextField
+                            label="Precio de venta"
+                            required
+                            fullWidth
+                            type="number"
+                            value={formData.price ?? ''}
+                            onChange={(e) => setFormData({ ...formData, price: Math.max(0, parseFloat(e.target.value) || 0) })}
+                            slotProps={{ htmlInput: { min: 0, step: '0.01' }, input: { startAdornment: <InputAdornment position="start">$</InputAdornment> } }}
+                            error={touched && priceInvalid}
+                            helperText={touched && priceInvalid ? 'El precio debe ser mayor que $0.' : ' '}
+                        />
+                        <TextField
+                            label="Existencia inicial (opcional)"
+                            fullWidth
+                            type="number"
+                            value={formData.quantity ?? ''}
+                            onChange={(e) => setFormData({ ...formData, quantity: e.target.value ? Math.max(0, parseInt(e.target.value, 10)) : undefined })}
+                            slotProps={{ htmlInput: { min: 0, step: 1 } }}
+                            helperText="Déjalo vacío si vas a registrar la entrada después."
+                        />
                     </Stack>
 
                     <MapLocationPicker
@@ -275,25 +303,23 @@ export function ProductDialog({ open, onClose, onSave, product }: ProductDialogP
                         }
                         label={
                             <Box>
-                                <Typography variant="body1">Mark as Default Product</Typography>
+                                <Typography variant="body1">Producto predeterminado</Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                    Setting this will remove default status from any other product.
+                                    Al marcarlo, deja de ser predeterminado cualquier otro producto.
                                 </Typography>
                             </Box>
                         }
                     />
+                    {saveError ? <Alert severity="error">{saveError}</Alert> : null}
                 </Stack>
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose} color="inherit">Cancel</Button>
-                <Button 
-                    onClick={handleSave} 
-                    variant="contained" 
-                    disabled={!formData.name}
-                >
-                    {product ? 'Save Changes' : 'Add Product'}
+                <Button onClick={onClose} color="inherit" disabled={saving}>Cancelar</Button>
+                <Button type="submit" variant="contained" disabled={saving}>
+                    {saving ? 'Guardando…' : product ? 'Guardar cambios' : 'Agregar producto'}
                 </Button>
             </DialogActions>
+            </form>
         </Dialog>
     );
 }

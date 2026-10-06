@@ -200,6 +200,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
           sku: option.sku,
           unitPrice: option.unitPrice,
           quantity: 1,
+          stockQuantity: option.stockQuantity,
         },
       ];
     });
@@ -369,65 +370,102 @@ export function PosSalesWorkspace(): React.JSX.Element {
 
   const canTransact = cashStatus?.hasOpenSession ?? false;
 
+  // Why "Cobrar" can't be pressed yet, shown next to the button instead of as an error after the click.
+  const missingPayment = Math.max(0, (preview?.total ?? 0) - totalReceived);
+  const chargeHint: string | null =
+    cart.length === 0
+      ? 'Agrega productos para cobrar.'
+      : !preview
+        ? previewError
+          ? null
+          : 'Calculando el total…'
+        : payments.length === 0
+          ? 'Elige una forma de pago.'
+          : missingPayment > 0.005
+            ? `Falta cobrar $${missingPayment.toFixed(2)}.`
+            : null;
+  const readyToCharge = chargeHint === null && !submitting && !previewError;
+
   return (
     <Box sx={{ flexGrow: 1 }}>
-      <Stack spacing={3}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ sm: 'center' }}>
-          <Stack spacing={0.5}>
-            <Typography variant="h4">Punto de Venta</Typography>
-            {canTransact && cashStatus?.session ? (
-              <Typography variant="body2" color="text.secondary">
-                {registerLabel} · abierta {new Date(cashStatus.session.openedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                {cashStatus.session.openedBy ? ` por ${cashStatus.session.openedBy}` : ''}
-                {cashStatus.cashInDrawer != null ? ` · Efectivo en caja: $${cashStatus.cashInDrawer.toFixed(2)}` : ''}
-              </Typography>
-            ) : null}
+      <Stack spacing={2.5}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ md: 'center' }}>
+          <Typography variant="h4" component="h2">
+            Punto de Venta
+          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <TextField
+              select
+              size="small"
+              label="Caja"
+              value={registerId}
+              onChange={(e) => {
+                const id = Number(e.target.value);
+                setRegisterId(id);
+                setSelectedCashRegisterId(id);
+                setCart([]);
+              }}
+              sx={{ minWidth: 240 }}
+            >
+              {registers.map((r) => (
+                <MenuItem key={r.id} value={r.id}>
+                  {r.name} · {r.storeName}
+                </MenuItem>
+              ))}
+            </TextField>
             {canTransact ? (
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="body2">
-                  Cajero: <strong>{cashier ? cashier.employeeName : 'sin identificar'}</strong>
-                </Typography>
-                <Button size="small" onClick={() => setCashierDialog('switch')}>
-                  {cashier ? 'Cambiar cajero' : 'Identificarse'}
+              <>
+                <Button variant="outlined" onClick={() => setMovementDialogOpen(true)}>
+                  Entrada / salida de efectivo
                 </Button>
-              </Stack>
+                <Button variant="outlined" color="warning" onClick={() => setClosingDialogOpen(true)}>
+                  Cerrar caja
+                </Button>
+              </>
             ) : null}
           </Stack>
-          {canTransact ? (
-            <Stack direction="row" spacing={1}>
-              <Button variant="outlined" onClick={() => setMovementDialogOpen(true)}>
-                Movimiento de Caja
-              </Button>
-              <Button variant="outlined" color="warning" onClick={() => setClosingDialogOpen(true)}>
-                Cerrar Caja
-              </Button>
-            </Stack>
-          ) : null}
         </Stack>
 
-        <Stack direction="row" spacing={2}>
-          <TextField
-            select
-            label="Caja"
-            value={registerId}
-            onChange={(e) => {
-              const id = Number(e.target.value);
-              setRegisterId(id);
-              setSelectedCashRegisterId(id);
-              setCart([]);
-            }}
-            sx={{ width: 280 }}
-          >
-            {registers.map((r) => (
-              <MenuItem key={r.id} value={r.id}>
-                {r.name} · {r.storeName}
-              </MenuItem>
-            ))}
-          </TextField>
-          {canTransact ? (
-            <CustomerPicker value={customer} onChange={setCustomer} />
-          ) : null}
-        </Stack>
+        {canTransact && cashStatus?.session ? (
+          <Card variant="outlined">
+            <CardContent sx={{ py: '12px !important' }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1, sm: 4 }} alignItems={{ sm: 'center' }}>
+                <Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    Caja abierta
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600}>
+                    desde las {new Date(cashStatus.session.openedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                    {cashStatus.session.openedBy ? ` · ${cashStatus.session.openedBy}` : ''}
+                  </Typography>
+                </Stack>
+                {cashStatus.cashInDrawer != null ? (
+                  <Stack>
+                    <Typography variant="caption" color="text.secondary">
+                      Efectivo en caja
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600}>
+                      ${cashStatus.cashInDrawer.toFixed(2)}
+                    </Typography>
+                  </Stack>
+                ) : null}
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: { sm: 'auto' } }}>
+                  <Stack>
+                    <Typography variant="caption" color="text.secondary">
+                      Cajero
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600} color={cashier ? 'text.primary' : 'warning.main'}>
+                      {cashier ? cashier.employeeName : 'Sin identificar'}
+                    </Typography>
+                  </Stack>
+                  <Button size="small" variant={cashier ? 'text' : 'contained'} onClick={() => setCashierDialog('switch')}>
+                    {cashier ? 'Cambiar' : 'Identificarme'}
+                  </Button>
+                </Stack>
+              </Stack>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {error ? (
           <Alert severity="error" onClose={() => setError(null)}>
@@ -438,98 +476,100 @@ export function PosSalesWorkspace(): React.JSX.Element {
         {!canTransact && !cashStatusLoading ? (
           <Card>
             <CardContent>
-              <Stack spacing={1} alignItems="center" sx={{ py: 4 }}>
+              <Stack spacing={1} alignItems="center" sx={{ py: 6 }}>
                 <Typography variant="h6">
-                  {cashStatus?.requiresPriorClosing
-                    ? 'Hay una caja abierta de un día anterior'
-                    : 'La caja no ha sido abierta'}
+                  {cashStatus?.requiresPriorClosing ? 'Hay una caja abierta de un día anterior' : 'La caja está cerrada'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" textAlign="center">
                   {cashStatus?.requiresPriorClosing
-                    ? 'Debes cerrar la caja pendiente antes de continuar registrando ventas.'
-                    : 'Debes abrir la caja registradora antes de registrar ventas.'}
+                    ? 'Cierra la caja pendiente para poder registrar ventas hoy.'
+                    : 'Abre la caja con el efectivo inicial para empezar a vender.'}
                 </Typography>
                 {!cashStatus?.requiresPriorClosing && !openingDialogOpen ? (
-                  <Button variant="contained" onClick={() => setOpeningDialogOpen(true)} sx={{ mt: 1 }}>
-                    Abrir Caja
+                  <Button variant="contained" size="large" onClick={() => setOpeningDialogOpen(true)} sx={{ mt: 1 }}>
+                    Abrir caja
                   </Button>
                 ) : null}
               </Stack>
             </CardContent>
           </Card>
-        ) : (
-          <Grid container spacing={3}>
-            <Grid size={{ xs: 12, md: 7 }}>
+        ) : null}
+
+        {canTransact ? (
+          <Grid container spacing={3} alignItems="flex-start">
+            <Grid size={{ xs: 12, md: 7, lg: 8 }}>
               <Card>
                 <CardContent>
                   <Stack spacing={2}>
                     <ProductSearchField storeId={storeId} onSelect={handleAddToCart} />
-
                     <Divider />
-
-                    <CartTable lines={cart} onUpdateLine={handleUpdateLine} onRemoveLine={handleRemoveLine} />
+                    <CartTable lines={cart} onUpdateLine={handleUpdateLine} onRemoveLine={handleRemoveLine} onClear={() => setCart([])} />
                   </Stack>
                 </CardContent>
               </Card>
             </Grid>
 
-            <Grid size={{ xs: 12, md: 5 }}>
+            <Grid size={{ xs: 12, md: 5, lg: 4 }} sx={{ position: { md: 'sticky' }, top: { md: 80 } }}>
               <Card>
                 <CardContent>
                   <Stack spacing={2}>
+                    <Stack spacing={0.5}>
+                      <Typography variant="overline" color="text.secondary">
+                        Total a cobrar
+                      </Typography>
+                      <Typography variant="h3" component="p" sx={{ fontWeight: 800 }}>
+                        {preview ? `$${preview.total.toFixed(2)}` : cart.length ? `$${subtotal.toFixed(2)}` : '$0.00'}
+                      </Typography>
+                      {preview && (preview.discountTotal > 0 || preview.taxTotal > 0) ? (
+                        <Typography variant="caption" color="text.secondary">
+                          Subtotal ${preview.subtotal.toFixed(2)}
+                          {preview.discountTotal > 0 ? ` · Descuentos -$${preview.discountTotal.toFixed(2)}` : ''}
+                          {preview.taxTotal > 0 ? ` · ${preview.priceIncludesTax ? 'IVA incluido' : 'IVA'} $${preview.taxTotal.toFixed(2)}` : ''}
+                        </Typography>
+                      ) : null}
+                    </Stack>
+
+                    {previewError ? <Alert severity="error">{previewError}</Alert> : null}
+
                     <Stack direction="row" spacing={1}>
                       <TextField
-                        label="Código de cupón"
+                        label="Cupón de descuento"
                         size="small"
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleValidateCoupon();
+                        }}
                         fullWidth
                       />
-                      <Button variant="outlined" onClick={handleValidateCoupon}>
-                        Validar
+                      <Button variant="outlined" onClick={handleValidateCoupon} disabled={!couponCode.trim()}>
+                        Aplicar
                       </Button>
                     </Stack>
                     {couponMessage ? <Alert severity={couponMessage.severity}>{couponMessage.text}</Alert> : null}
+
+                    <CustomerPicker value={customer} onChange={setCustomer} />
 
                     <Divider />
 
                     <PaymentMethodsPanel methods={paymentMethods} payments={payments} onChange={setPayments} amountDue={amountDue} />
 
-                    <Divider />
-
-                    {previewError ? <Alert severity="error">{previewError}</Alert> : null}
-                    <Stack spacing={0.5}>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="body2">Subtotal</Typography>
-                        <Typography variant="body2">${(preview?.subtotal ?? subtotal).toFixed(2)}</Typography>
-                      </Stack>
-                      {preview && preview.discountTotal > 0 ? (
-                        <Stack direction="row" justifyContent="space-between">
-                          <Typography variant="body2">Descuentos</Typography>
-                          <Typography variant="body2">-${preview.discountTotal.toFixed(2)}</Typography>
-                        </Stack>
+                    <Stack spacing={0.75}>
+                      <Button variant="contained" size="large" onClick={handleCharge} disabled={!readyToCharge} sx={{ minHeight: 56, fontSize: '1.0625rem' }}>
+                        {submitting ? 'Procesando…' : preview ? `Cobrar $${preview.total.toFixed(2)}` : 'Cobrar'}
+                      </Button>
+                      {chargeHint ? (
+                        <Typography variant="caption" color="text.secondary" textAlign="center" role="status">
+                          {chargeHint}
+                        </Typography>
                       ) : null}
-                      {preview && preview.taxTotal > 0 ? (
-                        <Stack direction="row" justifyContent="space-between">
-                          <Typography variant="body2">{preview.priceIncludesTax ? 'Impuestos (incluidos)' : 'Impuestos'}</Typography>
-                          <Typography variant="body2">${preview.taxTotal.toFixed(2)}</Typography>
-                        </Stack>
-                      ) : null}
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="h6">Total</Typography>
-                        <Typography variant="h6">{preview ? `$${preview.total.toFixed(2)}` : '—'}</Typography>
-                      </Stack>
                     </Stack>
-
-                    <Button variant="contained" size="large" onClick={handleCharge} disabled={submitting}>
-                      {submitting ? 'Procesando...' : 'Cobrar'}
-                    </Button>
                   </Stack>
                 </CardContent>
               </Card>
             </Grid>
           </Grid>
-        )}
+        ) : null}
       </Stack>
 
       {registerId && cashStatus && !cashStatus.hasOpenSession && !cashStatus.requiresPriorClosing ? (

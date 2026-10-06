@@ -4,6 +4,8 @@ import * as React from 'react';
 import Box, { BoxProps } from '@mui/material/Box';
 import { NoSsr } from '@/components/core/no-ssr';
 
+// 'light' is always white (for the always-navy sidebar/drawer and the login brand panel);
+// 'dark' follows the theme text colour: navy on light surfaces, near-white on dark ones.
 type Color = 'dark' | 'light';
 
 export interface LogoProps extends BoxProps {
@@ -25,28 +27,27 @@ export function Logo({
 
   return (
     <Box
+      role="img"
+      aria-label="Boneterías Aboytes"
       {...props}
       sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        // The artwork is a white SVG; painting it through a mask lets it take any colour.
+        backgroundColor: color === 'light' ? '#ffffff' : 'var(--mui-palette-text-primary)',
+        WebkitMaskImage: 'url(/assets/aboytes.svg)',
+        maskImage: 'url(/assets/aboytes.svg)',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+        display: 'inline-block',
         width: formattedWidth,
         height: formattedHeight,
         flexShrink: 0,
         ...sx,
       }}
-    >
-      <img
-        src="/assets/aboytes.svg"
-        alt="Aboytes Logo"
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'contain',
-          filter: color === 'light' ? 'brightness(0) invert(1)' : undefined,
-        }}
-      />
-    </Box>
+    />
   );
 }
 

@@ -63,8 +63,8 @@ export function NotificationsPopover({ anchorEl, onClose, open, notifications, l
       transformOrigin={{ horizontal: 'center', vertical: 'top' }}
     >
       <Box sx={{ p: 2, borderBottom: '1px solid var(--mui-palette-divider)' }}>
-        <Typography variant="h6">Notifications</Typography>
-        <Typography variant="body2" color="text.secondary">Today's active alerts and events</Typography>
+        <Typography variant="h6">Notificaciones</Typography>
+        <Typography variant="body2" color="text.secondary">Alertas y eventos de hoy</Typography>
       </Box>
 
       {loading ? (
@@ -73,7 +73,7 @@ export function NotificationsPopover({ anchorEl, onClose, open, notifications, l
         </Box>
       ) : notifications.length === 0 ? (
         <Box sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">You're all caught up!</Typography>
+          <Typography variant="body2" color="text.secondary">No tienes notificaciones pendientes.</Typography>
         </Box>
       ) : (
         <List disablePadding>
@@ -86,7 +86,7 @@ export function NotificationsPopover({ anchorEl, onClose, open, notifications, l
                 <ListItemText
                   primary={notif.message}
                   primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
-                  secondary={new Date(notif.date).toLocaleDateString()}
+                  secondary={new Date(notif.date).toLocaleDateString('es-MX')}
                   secondaryTypographyProps={{ variant: 'caption', display: 'block', mt: 0.5 }}
                 />
               </ListItem>
