@@ -21,13 +21,15 @@ export interface CashierTicket {
 export interface CashierSwitchDialogProps {
   open: boolean;
   cashRegisterId: number;
-  amountDue: number;
+  /** Shown when the dialog opens from "Cobrar"; omit when only switching cashier. */
+  amountDue?: number;
   onAuthenticated: (ticket: CashierTicket) => void;
   onClose: () => void;
 }
 
-// Several cashiers share one drawer: before each sale the cashier identifies with their user and
-// PIN (or password). The API returns a single-use ticket that the sale request carries.
+// Several cashiers share one drawer: the cashier identifies once per shift with their user and PIN
+// (or password). The API returns a ticket the POS keeps and sends with every sale until someone
+// switches cashier or the drawer is closed.
 export function CashierSwitchDialog({ open, cashRegisterId, amountDue, onAuthenticated, onClose }: CashierSwitchDialogProps): React.JSX.Element {
   const [username, setUsername] = React.useState('');
   const [secret, setSecret] = React.useState('');
@@ -69,11 +71,12 @@ export function CashierSwitchDialog({ open, cashRegisterId, amountDue, onAuthent
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth="xs" fullWidth>
       <form onSubmit={handleSubmit}>
-        <DialogTitle>¿Quién cobra?</DialogTitle>
+        <DialogTitle>{amountDue == null ? 'Cambiar cajero' : '¿Quién cobra?'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Typography variant="body2" color="text.secondary">
-              Total estimado: <strong>${amountDue.toFixed(2)}</strong>. Identifícate para registrar la venta a tu nombre.
+              {amountDue == null ? '' : <>Total: <strong>${amountDue.toFixed(2)}</strong>. </>}
+              Identifícate una vez; tus ventas se registrarán a tu nombre hasta que cambie el cajero o se cierre la caja.
             </Typography>
             <TextField
               label="Usuario"
@@ -97,7 +100,7 @@ export function CashierSwitchDialog({ open, cashRegisterId, amountDue, onAuthent
             Cancelar
           </Button>
           <Button type="submit" variant="contained" disabled={submitting}>
-            {submitting ? 'Verificando...' : 'Cobrar'}
+            {submitting ? 'Verificando...' : amountDue == null ? 'Entrar' : 'Cobrar'}
           </Button>
         </DialogActions>
       </form>

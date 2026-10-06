@@ -14,7 +14,7 @@ import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import apiClient from '@/lib/api-client';
-import { getSelectedCashRegisterId, setSelectedCashRegisterId } from '@/lib/pos/cash-register-storage';
+import { getSelectedCashRegisterId, getStoredCashier, setSelectedCashRegisterId, storeCashier } from '@/lib/pos/cash-register-storage';
 
 import { ProductSearchField, type VariantOption } from './product-search-field';
 import { CartTable, type CartLine } from './cart-table';
@@ -67,7 +67,10 @@ export function PosSalesWorkspace(): React.JSX.Element {
   // Several cashiers share this device's drawer; each identifies before charging (cashier switch).
   const [registers, setRegisters] = React.useState<CashRegisterOption[]>([]);
   const [registerId, setRegisterId] = React.useState<number | ''>('');
-  const [cashierDialogOpen, setCashierDialogOpen] = React.useState(false);
+  // The cashier identifies once per shift; null asks again on the next charge.
+  const [cashier, setCashier] = React.useState<CashierTicket | null>(null);
+  // 'charge' = identify and then charge; 'switch' = only change the active cashier.
+  const [cashierDialog, setCashierDialog] = React.useState<'charge' | 'switch' | null>(null);
   const [customer, setCustomer] = React.useState<CustomerOption | null>(null);
   const customerId = customer?.id;
   const [cart, setCart] = React.useState<CartLine[]>([]);
@@ -233,6 +236,16 @@ export function PosSalesWorkspace(): React.JSX.Element {
     setCustomer(null);
   };
 
+  // Restore this drawer's cashier when the drawer changes or the page reloads.
+  React.useEffect(() => {
+    setCashier(registerId ? getStoredCashier(registerId) : null);
+  }, [registerId]);
+
+  const changeCashier = (next: CashierTicket | null): void => {
+    setCashier(next);
+    if (registerId) storeCashier(registerId, next);
+  };
+
   const handleCharge = (): void => {
     if (!registerId) {
       setError('Seleccione una caja.');
@@ -256,11 +269,21 @@ export function PosSalesWorkspace(): React.JSX.Element {
       return;
     }
     setError(null);
-    setCashierDialogOpen(true);
+    if (cashier) {
+      handleSubmit(cashier);
+    } else {
+      setCashierDialog('charge');
+    }
+  };
+
+  const handleCashierAuthenticated = (next: CashierTicket): void => {
+    const mode = cashierDialog;
+    setCashierDialog(null);
+    changeCashier(next);
+    if (mode === 'charge') handleSubmit(next);
   };
 
   const handleSubmit = async (cashier: CashierTicket): Promise<void> => {
-    setCashierDialogOpen(false);
     setError(null);
     setSubmitting(true);
     try {
@@ -334,6 +357,11 @@ export function PosSalesWorkspace(): React.JSX.Element {
       if (code === 'NO_CASH_SESSION' || code === 'STALE_CASH_SESSION') {
         fetchCashStatus();
       }
+      // The cashier's ticket ended (drawer reopened, user deactivated, or expired): identify again.
+      if (code === 'CASHIER_TICKET_EXPIRED' || code === 'CASHIER_TICKET_REQUIRED') {
+        changeCashier(null);
+        setCashierDialog('charge');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -353,6 +381,16 @@ export function PosSalesWorkspace(): React.JSX.Element {
                 {cashStatus.session.openedBy ? ` por ${cashStatus.session.openedBy}` : ''}
                 {cashStatus.cashInDrawer != null ? ` · Efectivo en caja: $${cashStatus.cashInDrawer.toFixed(2)}` : ''}
               </Typography>
+            ) : null}
+            {canTransact ? (
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2">
+                  Cajero: <strong>{cashier ? cashier.employeeName : 'sin identificar'}</strong>
+                </Typography>
+                <Button size="small" onClick={() => setCashierDialog('switch')}>
+                  {cashier ? 'Cambiar cajero' : 'Identificarse'}
+                </Button>
+              </Stack>
             ) : null}
           </Stack>
           {canTransact ? (
@@ -511,7 +549,10 @@ export function PosSalesWorkspace(): React.JSX.Element {
           sessionId={cashStatus.session.id}
           registerLabel={registerLabel}
           onClose={() => {}}
-          onClosed={fetchCashStatus}
+          onClosed={() => {
+            changeCashier(null);
+            fetchCashStatus();
+          }}
         />
       ) : null}
 
@@ -523,6 +564,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
           onClose={() => setClosingDialogOpen(false)}
           onClosed={() => {
             setClosingDialogOpen(false);
+            changeCashier(null);
             fetchCashStatus();
           }}
         />
@@ -544,11 +586,11 @@ export function PosSalesWorkspace(): React.JSX.Element {
 
       {registerId ? (
         <CashierSwitchDialog
-          open={cashierDialogOpen}
+          open={cashierDialog !== null}
           cashRegisterId={registerId}
-          amountDue={amountDue}
-          onAuthenticated={handleSubmit}
-          onClose={() => setCashierDialogOpen(false)}
+          amountDue={cashierDialog === 'charge' ? amountDue : undefined}
+          onAuthenticated={handleCashierAuthenticated}
+          onClose={() => setCashierDialog(null)}
         />
       ) : null}
 
