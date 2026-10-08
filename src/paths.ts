@@ -20,6 +20,7 @@ export const paths = {
     settings: '/dashboard/settings',
     account: '/dashboard/account',
     activity: '/dashboard/activity',
+    security: '/dashboard/security',
     billing: {
       cashClosing: '/dashboard/billing/cash-closing',
     },

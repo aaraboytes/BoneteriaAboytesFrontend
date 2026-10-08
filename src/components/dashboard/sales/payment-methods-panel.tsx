@@ -21,6 +21,8 @@ export interface PaymentLine {
   key: string;
   paymentMethodId: number | '';
   receivedAmount: string;
+  // Set when the amount was already collected on a Mercado Pago terminal (the line is then locked).
+  mercadoPagoOrderId?: string;
 }
 
 export interface PaymentMethodsPanelProps {
@@ -28,13 +30,18 @@ export interface PaymentMethodsPanelProps {
   payments: PaymentLine[];
   onChange: (payments: PaymentLine[]) => void;
   amountDue: number;
+  // Called instead of adding a line when the cashier picks Mercado Pago: charge this amount on the terminal.
+  onMercadoPago?: (methodId: number, amount: number) => void;
+  // Gives back a Mercado Pago charge that was collected but not sold yet.
+  onRefundMercadoPago?: (payment: PaymentLine) => void;
 }
 
 const BILLS = [100, 200, 500];
+const isMercadoPago = (name: string | undefined): boolean => /mercado\s*pago/i.test(name ?? '');
 const isCash = (name: string | undefined): boolean => /efectivo|cash/i.test(name ?? '');
 const money = (n: number): string => `$${n.toFixed(2)}`;
 
-export function PaymentMethodsPanel({ methods, payments, onChange, amountDue }: PaymentMethodsPanelProps): React.JSX.Element {
+export function PaymentMethodsPanel({ methods, payments, onChange, amountDue, onMercadoPago, onRefundMercadoPago }: PaymentMethodsPanelProps): React.JSX.Element {
   const totalReceived = payments.reduce((sum, p) => sum + (parseFloat(p.receivedAmount) || 0), 0);
   const remaining = Math.max(0, amountDue - totalReceived);
   const change = Math.max(0, totalReceived - amountDue);
@@ -64,7 +71,7 @@ export function PaymentMethodsPanel({ methods, payments, onChange, amountDue }: 
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap role="group" aria-label="Agregar forma de pago">
         {activeMethods.map((method) => (
-          <Button key={method.id} variant="outlined" size="medium" disabled={!canPay} onClick={() => addPayment(method.id)} sx={{ minHeight: 44 }}>
+          <Button key={method.id} variant="outlined" size="medium" disabled={!canPay} onClick={() => (onMercadoPago && isMercadoPago(method.name) ? onMercadoPago(method.id, remaining) : addPayment(method.id))} sx={{ minHeight: 44 }}>
             {method.name}
           </Button>
         ))}
@@ -88,6 +95,7 @@ export function PaymentMethodsPanel({ methods, payments, onChange, amountDue }: 
                 type="number"
                 size="small"
                 label="Monto recibido"
+                disabled={Boolean(payment.mercadoPagoOrderId)}
                 value={payment.receivedAmount}
                 onChange={(e) => updatePayment(payment.key, { receivedAmount: e.target.value })}
                 slotProps={{
@@ -96,7 +104,17 @@ export function PaymentMethodsPanel({ methods, payments, onChange, amountDue }: 
                 }}
                 sx={{ width: 150 }}
               />
-              <IconButton aria-label={`Quitar pago con ${method?.name ?? 'método'}`} onClick={() => removePayment(payment.key)}>
+              {payment.mercadoPagoOrderId && onRefundMercadoPago ? (
+                <Button size="small" color="error" onClick={() => onRefundMercadoPago(payment)}>
+                  Reembolsar
+                </Button>
+              ) : null}
+              <IconButton
+                aria-label={`Quitar pago con ${method?.name ?? 'método'}`}
+                disabled={Boolean(payment.mercadoPagoOrderId)}
+                title={payment.mercadoPagoOrderId ? 'Ya cobrado en la terminal; no se puede quitar' : undefined}
+                onClick={() => removePayment(payment.key)}
+              >
                 <TrashIcon />
               </IconButton>
             </Stack>

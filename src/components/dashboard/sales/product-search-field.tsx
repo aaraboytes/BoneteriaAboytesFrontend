@@ -35,6 +35,12 @@ interface SearchResult {
 
 const toOption = (r: SearchResult): VariantOption => ({ ...r, unitPrice: r.price });
 
+// Looks a scanned barcode up at this store; null when nothing matches.
+export async function findVariantByBarcode(storeId: number, barcode: string): Promise<VariantOption | null> {
+  const res = await apiClient.get<SearchResult[]>('/Inventory/search', { params: { storeId, barcode } });
+  return res.data.length > 0 ? toOption(res.data[0]) : null;
+}
+
 function variantLabel(option: VariantOption): string {
   const parts = [option.description, option.sku];
   if (option.size) parts.push(option.size);

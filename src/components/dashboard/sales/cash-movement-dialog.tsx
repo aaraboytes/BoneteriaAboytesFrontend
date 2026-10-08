@@ -74,7 +74,7 @@ export function CashMovementDialog({ open, sessionId, cashInDrawer, onClose, onS
       return;
     }
     if (type === 'Withdrawal' && (!adminUsername.trim() || !adminPassword)) {
-      setError('Un administrador debe autorizar el retiro con su usuario y contraseña.');
+      setError('Un administrador o gerente debe autorizar el retiro con su usuario y contraseña.');
       return;
     }
 
@@ -127,10 +127,10 @@ export function CashMovementDialog({ open, sessionId, cashInDrawer, onClose, onS
           <TextField label="Motivo" value={reason} onChange={(e) => setReason(e.target.value)} multiline minRows={2} />
           {type === 'Withdrawal' ? (
             <Stack spacing={1}>
-              <Typography variant="subtitle2">Autorización de administrador</Typography>
+              <Typography variant="subtitle2">Autorización de administrador o gerente</Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <TextField
-                  label="Usuario administrador"
+                  label="Usuario administrador o gerente"
                   value={adminUsername}
                   onChange={(e) => setAdminUsername(e.target.value)}
                   autoComplete="off"

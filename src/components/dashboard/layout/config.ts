@@ -20,6 +20,7 @@ export const navItems = [
   { key: 'customers', title: 'Clientes', href: paths.dashboard.customers, icon: 'users', group: 'Administración' },
   { key: 'staff', title: 'Personal', href: paths.dashboard.staff, icon: 'user', group: 'Administración' },
   { key: 'roles', title: 'Roles y Permisos', href: paths.dashboard.roles, icon: 'shield-check', group: 'Administración' },
+  { key: 'security', title: 'Seguridad', href: paths.dashboard.security, icon: 'video-camera', group: 'Administración' },
   { key: 'activity', title: 'Actividad', href: paths.dashboard.activity, icon: 'pulse', group: 'Administración' },
   // Reachable from the user menu in the header; kept here so the header can show the page title.
   { key: 'settings', title: 'Configuración', href: paths.dashboard.settings, icon: 'gear-six', group: 'Administración', hidden: true },

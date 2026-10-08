@@ -36,12 +36,15 @@ import {
   Clock as ClockIcon,
   User as UserIcon,
   Storefront as StoreIcon,
+  Door as DoorClosedIcon,
+  DoorOpen as DoorOpenIcon,
 } from '@phosphor-icons/react';
 
 import apiClient from '@/lib/api-client';
 import { StockIntakeReportDialog } from '@/components/dashboard/inventory/stock-intake-report-dialog';
 import { StockWithdrawalReportDialog } from '@/components/dashboard/inventory/stock-withdrawal-report-dialog';
 import { StockTransferReportDialog } from '@/components/dashboard/inventory/stock-transfer-report-dialog';
+import { DoorEventDialog } from './door-event-dialog';
 import {
   CashOpeningDetailsDialog,
   CashClosingDetailsDialog,
@@ -50,7 +53,7 @@ import {
 
 export interface ActivityItem {
   id: string;
-  type: 'STOCK_INTAKE' | 'STOCK_WITHDRAWAL' | 'STOCK_TRANSFER' | 'CASH_OPEN' | 'CASH_CLOSE' | 'USER_LOGIN' | 'USER_LOGOUT';
+  type: 'STOCK_INTAKE' | 'STOCK_WITHDRAWAL' | 'STOCK_TRANSFER' | 'CASH_OPEN' | 'CASH_CLOSE' | 'USER_LOGIN' | 'USER_LOGOUT' | 'DOOR_OPENED' | 'DOOR_CLOSED';
   timestamp: string;
   user: string;
   location: string;
@@ -66,6 +69,8 @@ const EVENT_TYPE_CONFIG: Record<string, { label: string; color: 'success' | 'err
   CASH_CLOSE: { label: 'Corte Caja', color: 'warning', icon: <CashCloseIcon size={18} weight="bold" /> },
   USER_LOGIN: { label: 'Inicio Sesión', color: 'primary', icon: <LoginIcon size={18} weight="bold" /> },
   USER_LOGOUT: { label: 'Cierre Sesión', color: 'secondary', icon: <LogoutIcon size={18} weight="bold" /> },
+  DOOR_OPENED: { label: 'Puerta abierta', color: 'warning', icon: <DoorOpenIcon size={18} weight="bold" /> },
+  DOOR_CLOSED: { label: 'Puerta cerrada', color: 'success', icon: <DoorClosedIcon size={18} weight="bold" /> },
 };
 
 function formatEventTime(dateStr: string): { timeStr: string; dateStr: string } {
@@ -247,6 +252,8 @@ export function ActivityTable(): React.JSX.Element {
                 <MenuItem value="CASH_CLOSE">Cortes de Caja</MenuItem>
                 <MenuItem value="USER_LOGIN">Inicios de Sesión</MenuItem>
                 <MenuItem value="USER_LOGOUT">Cierres de Sesión</MenuItem>
+                <MenuItem value="DOOR_OPENED">Puertas abiertas</MenuItem>
+                <MenuItem value="DOOR_CLOSED">Puertas cerradas</MenuItem>
               </Select>
             </FormControl>
           </Stack>
@@ -413,6 +420,15 @@ export function ActivityTable(): React.JSX.Element {
         <UserSessionDetailsDialog
           open={Boolean(selectedItem)}
           type={selectedItem.type}
+          data={selectedItem.details}
+          onClose={handleCloseDialog}
+        />
+      )}
+
+      {(selectedItem?.type === 'DOOR_OPENED' || selectedItem?.type === 'DOOR_CLOSED') && (
+        <DoorEventDialog
+          open={Boolean(selectedItem)}
+          opened={selectedItem.type === 'DOOR_OPENED'}
           data={selectedItem.details}
           onClose={handleCloseDialog}
         />

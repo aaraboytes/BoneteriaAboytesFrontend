@@ -15,6 +15,7 @@
     "settings": true,
     "account": true,
     "activity": true,
+    "security": true,
     "consultations": false,
     "appointments": false,
     "billing": false,

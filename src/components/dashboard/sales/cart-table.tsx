@@ -25,7 +25,7 @@ export interface CartLine {
 
 export interface CartTableProps {
   lines: CartLine[];
-  onUpdateLine: (productVariantId: string, changes: Partial<Pick<CartLine, 'unitPrice' | 'quantity'>>) => void;
+  onUpdateLine: (productVariantId: string, changes: Partial<Pick<CartLine, 'quantity'>>) => void;
   onRemoveLine: (productVariantId: string) => void;
   onClear?: () => void;
 }
@@ -86,15 +86,9 @@ export function CartTable({ lines, onUpdateLine, onRemoveLine, onClear }: CartTa
                 </Stack>
               </Box>
 
-              <TextField
-                type="number"
-                size="small"
-                label="Precio"
-                value={line.unitPrice}
-                onChange={(e) => onUpdateLine(line.productVariantId, { unitPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
-                slotProps={{ htmlInput: { step: '0.01', min: 0, 'aria-label': `Precio de ${line.description}` } }}
-                sx={{ width: 104 }}
-              />
+              <Typography variant="body2" color="text.secondary" sx={{ minWidth: 72, textAlign: { sm: 'right' } }} aria-label={`Precio de ${line.description}`}>
+                {money(line.unitPrice)}
+              </Typography>
 
               <Stack direction="row" alignItems="center" role="group" aria-label={`Cantidad de ${line.description}`}>
                 <IconButton

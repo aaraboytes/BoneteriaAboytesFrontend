@@ -44,7 +44,7 @@ export function VoidSaleDialog({ open, sale, onClose, onVoided }: VoidSaleDialog
       return;
     }
     if (!adminUsername.trim() || !adminPassword) {
-      setError('Un administrador debe autorizar la cancelación.');
+      setError('Un administrador o gerente debe autorizar la cancelación.');
       return;
     }
 
@@ -77,8 +77,8 @@ export function VoidSaleDialog({ open, sale, onClose, onVoided }: VoidSaleDialog
             </Typography>
           ) : null}
           <TextField label="Motivo" value={reason} onChange={(e) => setReason(e.target.value)} multiline minRows={2} autoFocus />
-          <Typography variant="subtitle2">Autorización de administrador</Typography>
-          <TextField label="Usuario administrador" value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} autoComplete="off" />
+          <Typography variant="subtitle2">Autorización de administrador o gerente</Typography>
+          <TextField label="Usuario administrador o gerente" value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} autoComplete="off" />
           <TextField
             label="Contraseña"
             type="password"

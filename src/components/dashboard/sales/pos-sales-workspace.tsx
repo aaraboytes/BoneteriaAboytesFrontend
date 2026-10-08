@@ -16,8 +16,10 @@ import Snackbar from '@mui/material/Snackbar';
 import apiClient from '@/lib/api-client';
 import { getSelectedCashRegisterId, getStoredCashier, setSelectedCashRegisterId, storeCashier } from '@/lib/pos/cash-register-storage';
 
-import { ProductSearchField, type VariantOption } from './product-search-field';
+import { findVariantByBarcode, ProductSearchField, type VariantOption } from './product-search-field';
 import { CartTable, type CartLine } from './cart-table';
+import { MercadoPagoDialog } from './mercado-pago-dialog';
+import { MercadoPagoRefundDialog } from './mercado-pago-refund-dialog';
 import { PaymentMethodsPanel, type PaymentMethodOption, type PaymentLine } from './payment-methods-panel';
 import { SaleReceiptDialog, type CompletedSale } from './sale-receipt-dialog';
 import { CashOpeningDialog } from './cash-opening-dialog';
@@ -83,6 +85,8 @@ export function PosSalesWorkspace(): React.JSX.Element {
   const [payments, setPayments] = React.useState<PaymentLine[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [mpRefund, setMpRefund] = React.useState<PaymentLine | null>(null);
+  const [mpCharge, setMpCharge] = React.useState<{ methodId: number; amount: number } | null>(null);
   const [completedSale, setCompletedSale] = React.useState<CompletedSale | null>(null);
 
   const [cashStatus, setCashStatus] = React.useState<CashStatus | null>(null);
@@ -165,7 +169,6 @@ export function PosSalesWorkspace(): React.JSX.Element {
             saleItems: cart.map((line) => ({
               productVariantId: line.productVariantId,
               quantity: line.quantity,
-              unitPrice: line.unitPrice,
             })),
           },
           { params: { cashRegisterId: registerId } }
@@ -206,7 +209,73 @@ export function PosSalesWorkspace(): React.JSX.Element {
     });
   };
 
-  const handleUpdateLine = (productVariantId: string, changes: Partial<Pick<CartLine, 'unitPrice' | 'quantity'>>): void => {
+  // A Bluetooth scanner is a keyboard: it "types" the code quickly and ends with Enter. When no field
+  // has focus (e.g. after clicking a button or the table) the search box would miss it, so listen on
+  // the whole page. Scans that land in a field are left to that field (the search box handles its own).
+  const scanContext = React.useRef<{ storeId: number | ''; canTransact: boolean }>({ storeId: '', canTransact: false });
+  const handleScan = async (code: string): Promise<void> => {
+    const { storeId: currentStore } = scanContext.current;
+    if (!currentStore) return;
+    try {
+      const option = await findVariantByBarcode(currentStore, code);
+      if (option) {
+        handleAddToCart(option);
+        setError(null);
+      } else {
+        setError(`No se encontró ningún producto con el código "${code}".`);
+      }
+    } catch (err) {
+      console.error('Barcode lookup failed', err);
+      setError('No se pudo buscar el código. Revisa la conexión e inténtalo de nuevo.');
+    }
+  };
+  const scanHandlerRef = React.useRef(handleScan);
+  scanHandlerRef.current = handleScan;
+  scanContext.current = { storeId, canTransact: cashStatus?.hasOpenSession ?? false };
+
+  React.useEffect(() => {
+    const MAX_GAP_MS = 100; // keys further apart than this are a person typing, not a scanner
+    const MIN_LENGTH = 3;
+    let buffer = '';
+    let lastKeyAt = 0;
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!scanContext.current.canTransact || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) {
+        buffer = '';
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastKeyAt > MAX_GAP_MS) buffer = '';
+      lastKeyAt = now;
+
+      if (event.key === 'Enter') {
+        if (buffer.length >= MIN_LENGTH) {
+          // Don't let the scanner's Enter press whichever button has focus (e.g. "Cobrar").
+          event.preventDefault();
+          const code = buffer;
+          buffer = '';
+          void scanHandlerRef.current(code);
+        } else {
+          buffer = '';
+        }
+        return;
+      }
+
+      if (event.key.length === 1) {
+        // Also stops a scanned space from clicking a focused button.
+        event.preventDefault();
+        buffer += event.key;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
+  const handleUpdateLine = (productVariantId: string, changes: Partial<Pick<CartLine, 'quantity'>>): void => {
     setCart((prev) => prev.map((line) => (line.productVariantId === productVariantId ? { ...line, ...changes } : line)));
   };
 
@@ -301,6 +370,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
           remainingDue -= amount;
           return {
             paymentMethodId: p.paymentMethodId as number,
+            mercadoPagoOrderId: p.mercadoPagoOrderId,
             amount,
             receivedAmount: received,
             changeGiven,
@@ -314,7 +384,6 @@ export function PosSalesWorkspace(): React.JSX.Element {
         saleItems: cart.map((line) => ({
           productVariantId: line.productVariantId,
           quantity: line.quantity,
-          unitPrice: line.unitPrice,
         })),
         payments: paymentsPayload,
       };
@@ -552,7 +621,7 @@ export function PosSalesWorkspace(): React.JSX.Element {
 
                     <Divider />
 
-                    <PaymentMethodsPanel methods={paymentMethods} payments={payments} onChange={setPayments} amountDue={amountDue} />
+                    <PaymentMethodsPanel methods={paymentMethods} payments={payments} onChange={setPayments} amountDue={amountDue} onMercadoPago={(methodId, amount) => setMpCharge({ methodId, amount })} onRefundMercadoPago={setMpRefund} />
 
                     <Stack spacing={0.75}>
                       <Button variant="contained" size="large" onClick={handleCharge} disabled={!readyToCharge} sx={{ minHeight: 56, fontSize: '1.0625rem' }}>
@@ -634,6 +703,30 @@ export function PosSalesWorkspace(): React.JSX.Element {
         />
       ) : null}
 
+      <MercadoPagoDialog
+        open={mpCharge !== null}
+        amount={mpCharge?.amount ?? 0}
+        onClose={() => setMpCharge(null)}
+        onPaid={(orderId) => {
+          if (mpCharge) {
+            setPayments((prev) => [
+              ...prev,
+              { key: `mp-${orderId}`, paymentMethodId: mpCharge.methodId, receivedAmount: mpCharge.amount.toFixed(2), mercadoPagoOrderId: orderId },
+            ]);
+          }
+          setMpCharge(null);
+        }}
+      />
+      <MercadoPagoRefundDialog
+        open={mpRefund !== null}
+        orderId={mpRefund?.mercadoPagoOrderId ?? ''}
+        amount={Number.parseFloat(mpRefund?.receivedAmount ?? '0') || 0}
+        onClose={() => setMpRefund(null)}
+        onRefunded={() => {
+          setPayments((prev) => prev.filter((p) => p.key !== mpRefund?.key));
+          setMpRefund(null);
+        }}
+      />
       <SaleReceiptDialog open={completedSale !== null} sale={completedSale} onClose={() => setCompletedSale(null)} />
 
       <Snackbar
